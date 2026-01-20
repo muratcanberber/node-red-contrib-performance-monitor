@@ -1,0 +1,563 @@
+<script type="text/javascript">
+    (function () {
+        'use strict';
+
+        // Performance Monitor Sidebar Plugin V5 - Developer HUD & Theming
+        let settings = {
+            refreshInterval: 2000,
+            theme: 'auto'
+        };
+        let pollTimer = null;
+        let isPaused = false;
+
+        // Theme Logic
+        const themes = {
+            dark: {
+                '--pm-bg': '#1e1e1e', '--pm-bg-sec': '#252525', '--pm-bg-head': 'rgba(0,0,0,0.5)',
+                '--pm-text': '#ccc', '--pm-text-muted': '#666', '--pm-text-bright': '#fff',
+                '--pm-accent': '#00bcd4', '--pm-border': '#333', '--pm-bar-bg': '#333',
+                '--pm-good': '#4caf50', '--pm-warn': '#ff9800', '--pm-crit': '#f44336'
+            },
+            light: {
+                '--pm-bg': '#f3f3f3', '--pm-bg-sec': '#fff', '--pm-bg-head': 'rgba(255,255,255,0.85)',
+                '--pm-text': '#333', '--pm-text-muted': '#555', '--pm-text-bright': '#000',
+                '--pm-accent': '#00796b', '--pm-border': '#ccc', '--pm-bar-bg': '#e0e0e0',
+                '--pm-good': '#2e7d32', '--pm-warn': '#ef6c00', '--pm-crit': '#c62828'
+            }
+        };
+
+        function applyTheme(themeName) {
+            let t = themeName;
+            if (t === 'auto') {
+                t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            const colors = themes[t] || themes.dark;
+            const root = document.documentElement;
+            Object.keys(colors).forEach(key => root.style.setProperty(key, colors[key]));
+        }
+
+        // History for Sparklines (store last 20 points)
+        const history = {
+            read: new Array(20).fill(0),
+            write: new Array(20).fill(0),
+            rx: new Array(20).fill(0),
+            tx: new Array(20).fill(0)
+        };
+
+        // Session Peak Tracker (High Watermark)
+        const sessionRec = {
+            peakRam: 0,
+            historyRam: [],
+            isLeaking: false
+        };
+
+        // Helper: Format bytes
+        function formatBytes(bytes, decimals = 1) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(decimals)) + ' ' + sizes[i];
+        }
+
+        // Helper: Format duration
+        function formatUptime(seconds) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            if (days > 0) return `${days}d ${hours}h ${mins}m`;
+            return `${hours}h ${mins}m`;
+        }
+
+        // Helper: Get color based on usage thresholds
+        function getStatusClass(percent) {
+            if (percent < 70) return 'pm-status-good';
+            if (percent < 90) return 'pm-status-warn';
+            return 'pm-status-crit';
+        }
+
+        // Sparkline Generator
+        function generateSparkline(dataPoints, width = 100, height = 25, color = '#00bcd4') {
+            const max = Math.max(...dataPoints, 1); // Avoid div by zero
+            const step = width / (dataPoints.length - 1);
+
+            // Build points string
+            const points = dataPoints.map((val, i) => {
+                const x = i * step;
+                const y = height - (val / max * height);
+                return `${x},${y}`;
+            }).join(' ');
+
+            return `
+            <svg width="${width}" height="${height}" class="pm-sparkline">
+                <polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        `;
+        }
+
+        // Header Widget Injection (V6 - Peak RAM)
+        function injectHeaderWidget() {
+            const header = document.getElementById('red-ui-header') || document.getElementById('header');
+            if (!header) return;
+
+            if (document.getElementById('pm-header-widget')) return;
+
+            const widget = document.createElement('div');
+            widget.id = 'pm-header-widget';
+            // HTML Structure: CPU | Stacked RAM Bar | Peak
+            widget.innerHTML = `
+            <div class="pm-hw-group" title="CPU Load">
+                <i class="fa fa-microchip"></i> <span id="pm-hw-cpu">--%</span>
+            </div>
+            <div class="pm-hw-sep"></div>
+            <div class="pm-hw-group pm-hw-ram-group" title="RAM: Node-RED (Bright) | System (Dim) | Free (Empty)">
+                <i class="fa fa-memory"></i>
+                <div class="pm-ram-stack">
+                    <div id="pm-ram-nr" class="pm-rs-bar pm-rs-nr"></div>
+                    <div id="pm-ram-sys" class="pm-rs-bar pm-rs-sys"></div>
+                </div>
+                <span id="pm-hw-ram-text" class="pm-hw-mini-text">--/--</span>
+            </div>
+            <div class="pm-hw-sep"></div>
+            <div class="pm-hw-group pm-hw-peak" id="pm-hw-peak" title="Session Peak RAM (High Watermark)">
+                <i class="fa fa-arrow-up"></i> <span id="pm-hw-peak-val">--</span>
+            </div>
+        `;
+
+            const style = document.createElement('style');
+            style.textContent = `
+            #pm-header-widget {
+                position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+                height: 40px; display: flex; align-items: center;
+                background: var(--pm-bg-head, rgba(0,0,0,0.3));
+                backdrop-filter: blur(4px);
+                border-radius: 0 0 8px 8px; padding: 0 15px;
+                color: var(--pm-text-bright); /* Force bright/visible text */
+                font-family: 'Consolas', monospace; font-size: 12px; font-weight: bold;
+                z-index: 999; border: 1px solid var(--pm-border); border-top: none;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            }
+            .pm-hw-group { display: flex; align-items: center; gap: 6px; }
+            .pm-hw-sep { height: 16px; width: 1px; background: var(--pm-border); margin: 0 10px; }
+
+            /* Stacked RAM Bar */
+            .pm-ram-stack {
+                width: 80px; height: 8px; background: rgba(100,100,100,0.2);
+                border-radius: 2px; display: flex; overflow: hidden; position: relative;
+            }
+            .pm-rs-bar { height: 100%; transition: width 0.5s ease; }
+            .pm-rs-nr { background: var(--pm-accent); box-shadow: 0 0 4px var(--pm-accent); z-index: 2; }
+            .pm-rs-sys { background: var(--pm-text-muted); opacity: 0.5; z-index: 1; }
+
+            .pm-hw-mini-text { font-size: 11px; color: var(--pm-text); min-width: 60px; text-align: right; }
+
+            .pm-hw-peak { cursor: help; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,0.05); }
+            .pm-peak-val { color: var(--pm-warn); }
+            .pm-leak-warn { animation: pm-pulse 2s infinite; color: var(--pm-crit); font-weight: bold; }
+            @keyframes pm-pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        `;
+            document.head.appendChild(style);
+            header.appendChild(widget);
+        }
+
+        function updateHeaderWidget(stats) {
+            const cpuEl = document.getElementById('pm-hw-cpu');
+            const nrBar = document.getElementById('pm-ram-nr');
+            const sysBar = document.getElementById('pm-ram-sys');
+            const ramText = document.getElementById('pm-hw-ram-text');
+            const peakEl = document.getElementById('pm-hw-peak-val');
+            const peakContainer = document.getElementById('pm-hw-peak');
+
+            if (!cpuEl || !stats || !stats.system || !stats.nodeRed) return;
+
+            // CPU
+            const cpuVal = stats.system.cpu || 0;
+            cpuEl.textContent = cpuVal.toFixed(1) + '%';
+
+            // RAM Stacked Bar Logic
+            const totalMem = stats.system.memory.total || 1; // Prevent div/0
+            const nrMem = stats.nodeRed.memory.heapUsed || 0;
+            const sysMemTotal = stats.system.memory.used || 0;
+            const otherSysMem = Math.max(0, sysMemTotal - nrMem); // Safety check
+
+            const nrPct = (nrMem / totalMem) * 100;
+            const otherPct = (otherSysMem / totalMem) * 100;
+
+            // Safety: Ensure valid numbers for CSS
+            nrBar.style.width = (isNaN(nrPct) ? 0 : nrPct) + '%';
+            sysBar.style.width = (isNaN(otherPct) ? 0 : otherPct) + '%';
+
+            // Text: "NR_USED" (Made primarily visible as requested)
+            ramText.textContent = `${formatBytes(nrMem, 1)}`;
+            ramText.title = `Node-RED: ${formatBytes(nrMem)} / System Total: ${formatBytes(totalMem)}`;
+
+            // Peak / High Watermark Logic
+            if (nrMem > sessionRec.peakRam) {
+                sessionRec.peakRam = nrMem;
+            }
+
+            peakEl.textContent = formatBytes(sessionRec.peakRam);
+
+            updateLeakDetection(nrMem, peakContainer);
+        }
+
+        function updateLeakDetection(currentRam, el) {
+            sessionRec.historyRam.push(currentRam);
+            if (sessionRec.historyRam.length > 150) sessionRec.historyRam.shift();
+
+            // Simple heuristic: Strict increase check over last 20 samples
+            if (sessionRec.historyRam.length >= 20) {
+                const recent = sessionRec.historyRam.slice(-10);
+                // Safety: filter undefined
+                if (recent.some(isNaN)) return;
+
+                const isRising = recent.every((val, i, arr) => i === 0 || val >= arr[i - 1]);
+
+                // Warn if rising AND near peak
+                if (isRising && (currentRam >= sessionRec.peakRam * 0.99)) {
+                    el.classList.add('pm-leak-warn');
+                    el.title = "Warning: RAM Rising Steadily (Potential Leak)";
+                } else {
+                    el.classList.remove('pm-leak-warn');
+                }
+            }
+        }
+
+        // Settings Panel UI (V5)
+        function showSettingsPanel() {
+            // ... (Cleanup old overlay if exists)
+            document.getElementById('pm-settings-overlay')?.remove();
+
+            const panel = document.createElement('div');
+            panel.id = 'pm-settings-overlay';
+            panel.innerHTML = `
+            <div class="pm-settings-modal">
+                <h3>HUD CONFIG</h3>
+                <div class="pm-setting-row">
+                    <label>REFRESH RATE (MS)</label>
+                    <select id="pm-setting-interval">
+                        <option value="1000">1000</option>
+                        <option value="2000">2000</option>
+                        <option value="5000">5000</option>
+                    </select>
+                </div>
+                <div class="pm-setting-row">
+                    <label>THEME</label>
+                    <select id="pm-setting-theme">
+                        <option value="auto">AUTO (SYSTEM)</option>
+                        <option value="dark">DARK</option>
+                        <option value="light">LIGHT</option>
+                    </select>
+                </div>
+                <div class="pm-settings-actions">
+                    <button class="pm-btn-cancel" onclick="RED.performanceMonitor.closeSettings()">CANCEL</button>
+                    <button class="pm-btn-save" onclick="RED.performanceMonitor.saveSettings()">APPLY</button>
+                </div>
+            </div>
+        `;
+            document.body.appendChild(panel);
+            document.getElementById('pm-setting-interval').value = settings.refreshInterval;
+            document.getElementById('pm-setting-theme').value = settings.theme || 'auto';
+        }
+
+        // Build Sidebar Content (V5 - CSS Variables)
+        function buildSidebarContent() {
+            return `
+        <style>
+            /* Tech HUD Theme via CSS Vars */
+            .pm-sidebar {
+                padding: 0; margin: 0;
+                color: var(--pm-text);
+                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                font-size: 11px;
+                background: var(--pm-bg);
+                height: 100%; overflow-y: auto;
+                transition: background 0.3s, color 0.3s;
+            }
+            .pm-title { color: var(--pm-accent); font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; font-size: 10px; }
+            .pm-value { color: var(--pm-text-bright); font-weight: bold; }
+            .pm-unit { color: var(--pm-text-muted); font-size: 9px; }
+
+            .pm-status-good { background-color: var(--pm-good); }
+            .pm-status-warn { background-color: var(--pm-warn); }
+            .pm-status-crit { background-color: var(--pm-crit); }
+
+            .pm-section {
+                padding: 10px; border-bottom: 1px solid var(--pm-border);
+                background: var(--pm-bg-sec);
+            }
+            .pm-section.draggable { cursor: move; }
+            .pm-section.dragging { opacity: 0.5; border: 1px dashed var(--pm-accent); }
+
+            .pm-section-header { display: flex; justify-content: space-between; cursor: pointer; user-select: none; margin-bottom: 8px; }
+            .pm-section.collapsed .pm-content { display: none; }
+
+            .pm-grid-row { display: grid; grid-template-columns: 80px 1fr 60px; gap: 8px; align-items: center; margin-bottom: 6px; }
+            .pm-grid-wide { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
+
+            .pm-bar-container { height: 6px; background: var(--pm-bar-bg); border-radius: 2px; overflow: hidden; }
+            .pm-bar-fill { height: 100%; transition: width 0.3s; }
+
+            .pm-spark-box { background: var(--pm-bg); padding: 5px; border: 1px solid var(--pm-border); border-radius: 3px; }
+            .pm-spark-header { display: flex; justify-content: space-between; margin-bottom: 2px; }
+            .pm-spark-label { font-size: 9px; color: var(--pm-text-muted); }
+
+            .pm-toolbar { display: flex; border-bottom: 1px solid var(--pm-border); background: var(--pm-bg-sec); padding: 5px; }
+            .pm-toolbar button { background: none; border: 1px solid var(--pm-border); color: var(--pm-text-muted); padding: 2px 8px; margin-right: 5px; font-family: inherit; font-size: 10px; cursor: pointer; }
+            .pm-toolbar button:hover { border-color: var(--pm-text-muted); color: var(--pm-text); }
+            .pm-toolbar button.active { border-color: var(--pm-accent); color: var(--pm-accent); }
+
+            /* Settings Modal */
+            #pm-settings-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 999; display: flex; justify-content: center; align-items: center; }
+            .pm-settings-modal { background: var(--pm-bg-sec); border: 1px solid var(--pm-accent); padding: 20px; width: 250px; font-family: 'Consolas', monospace; box-shadow: 0 0 20px rgba(0,188,212,0.2); }
+            .pm-settings-modal h3 { color: var(--pm-accent); margin: 0 0 15px 0; font-size: 14px; text-transform: uppercase; border-bottom: 1px solid var(--pm-border); padding-bottom: 5px; }
+            .pm-setting-row label { display: block; color: var(--pm-text-muted); font-size: 10px; margin-bottom: 5px; }
+            .pm-setting-row select { width: 100%; background: var(--pm-bg); color: var(--pm-text); border: 1px solid var(--pm-border); padding: 5px; font-family: inherit; }
+            .pm-settings-actions { text-align: right; }
+            .pm-btn-save { background: var(--pm-accent); color: #000; border: none; padding: 5px 15px; font-weight: bold; cursor: pointer; }
+            .pm-btn-cancel { background: transparent; color: var(--pm-text-muted); border: 1px solid var(--pm-border); padding: 4px 10px; margin-right: 5px; cursor: pointer; }
+        </style>
+
+        <div class="pm-toolbar">
+            <button onclick="RED.performanceMonitor.openSettings()">CONFIG</button>
+            <button id="pm-btn-pause" onclick="RED.performanceMonitor.togglePause()">PAUSE</button>
+            <button onclick="RED.performanceMonitor.refresh()">REFRESH</button>
+            <div style="flex:1"></div>
+            <span id="pm-connection-status" style="color:#00bcd4; font-size:9px; align-self:center;">ONLINE</span>
+        </div>
+        <div id="pm-container" class="pm-sidebar"></div>
+        `;
+        }
+
+        // Default Section Order
+        let sectionOrder = ['cpu', 'memory', 'disk', 'io', 'process'];
+
+        // Render Logic
+        function renderSections(stats) {
+            const container = document.getElementById('pm-container');
+            if (!container) return;
+
+            sectionOrder.forEach(sectionId => {
+                let sectionEl = document.getElementById(`pm-sec-${sectionId}`);
+                if (!sectionEl) {
+                    sectionEl = createSectionElement(sectionId);
+                    container.appendChild(sectionEl);
+                }
+                updateSectionContent(sectionId, stats);
+            });
+        }
+
+        function createSectionElement(id) {
+            const el = document.createElement('div');
+            el.id = `pm-sec-${id}`;
+            el.className = 'pm-section';
+            el.draggable = true;
+            el.dataset.id = id;
+
+            // Drag Events
+            el.addEventListener('dragstart', handleDragStart);
+            el.addEventListener('dragover', handleDragOver);
+            el.addEventListener('drop', handleDrop);
+            el.addEventListener('dragend', handleDragEnd);
+
+            el.innerHTML = `
+            <div class="pm-section-header" onclick="RED.performanceMonitor.toggle('${id}')">
+                <span class="pm-title">> ${id.toUpperCase()}</span>
+                <span class="pm-toggle-icon">[-]</span>
+            </div>
+            <div class="pm-content" id="pm-body-${id}"></div>
+        `;
+            return el;
+        }
+
+        // Drag Handlers
+        let dragSrcEl = null;
+        function handleDragStart(e) { dragSrcEl = this; e.dataTransfer.effectAllowed = 'move'; this.classList.add('dragging'); }
+        function handleDragOver(e) { if (e.preventDefault) e.preventDefault(); e.dataTransfer.dropEffect = 'move'; return false; }
+        function handleDrop(e) {
+            if (e.stopPropagation) e.stopPropagation();
+            if (dragSrcEl !== this) {
+                const container = document.getElementById('pm-container');
+                const sections = [...container.querySelectorAll('.pm-section')];
+                const srcIdx = sections.indexOf(dragSrcEl);
+                const tgtIdx = sections.indexOf(this);
+                srcIdx < tgtIdx ? this.after(dragSrcEl) : this.before(dragSrcEl);
+                sectionOrder = [...container.querySelectorAll('.pm-section')].map(el => el.dataset.id);
+            }
+            return false;
+        }
+        function handleDragEnd() { this.classList.remove('dragging'); }
+
+        // Update Content
+        function updateSectionContent(id, stats) {
+            const body = document.getElementById(`pm-body-${id}`);
+            if (!body) return;
+
+            // Update history arrays
+            if (id === 'io') {
+                history.read.push(stats.io.disk.read); history.read.shift();
+                history.write.push(stats.io.disk.write); history.write.shift();
+                history.rx.push(stats.io.network.rx_sec); history.rx.shift();
+                history.tx.push(stats.io.network.tx_sec); history.tx.shift();
+            }
+
+            let html = '';
+
+            if (id === 'cpu') {
+                html = `
+                ${progressBar('Total Load', stats.system.cpu, stats.system.cpu + '%')}
+                ${progressBar('NR Contrib', stats.nodeRed.cpu, stats.nodeRed.cpu.toFixed(1) + '%', 100)}
+                <div style="text-align:right; font-size:9px; color:#666; margin-top:4px">Core Count: ${stats.system.cpu.cores || 1}</div>
+            `;
+            }
+            else if (id === 'memory') {
+                html = `
+                ${progressBar('System RAM', stats.system.memory.usedPercent, formatBytes(stats.system.memory.used))}
+                <div class="pm-grid-row">
+                    <span>NR HEAP</span>
+                    <div class="pm-bar-container"><div class="pm-bar-fill ${getStatusClass((stats.nodeRed.memory.heapUsed / stats.nodeRed.memory.heapTotal * 100))}" style="width:${(stats.nodeRed.memory.heapUsed / stats.nodeRed.memory.heapTotal * 100)}%"></div></div>
+                    <span class="pm-value" style="text-align:right">${formatBytes(stats.nodeRed.memory.heapUsed)}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; color:#666; padding-top:4px">
+                    <span>Avail: ${formatBytes(stats.system.memory.available)}</span>
+                    <span>Total: ${formatBytes(stats.system.memory.total)}</span>
+                </div>
+            `;
+            }
+            else if (id === 'disk') {
+                html = progressBar(stats.system.disk.mount, stats.system.disk.usedPercent, formatBytes(stats.system.disk.used));
+                html += `<div style="text-align:right; color:#666">Size: ${formatBytes(stats.system.disk.total)}</div>`;
+            }
+            else if (id === 'io') {
+                html = `
+                <div class="pm-grid-wide">
+                    <div class="pm-spark-box">
+                        <div class="pm-spark-header"><span class="pm-spark-label">DISK READ</span><span class="pm-value">${stats.io.disk.read}</span></div>
+                        ${generateSparkline(history.read, 80, 20, '#4caf50')}
+                    </div>
+                    <div class="pm-spark-box">
+                        <div class="pm-spark-header"><span class="pm-spark-label">DISK WRITE</span><span class="pm-value">${stats.io.disk.write}</span></div>
+                        ${generateSparkline(history.write, 80, 20, '#ff9800')}
+                    </div>
+                </div>
+                <div class="pm-grid-wide">
+                    <div class="pm-spark-box">
+                        <div class="pm-spark-header"><span class="pm-spark-label">NET DOWN</span><span class="pm-value">${formatBytes(stats.io.network.rx_sec)}/s</span></div>
+                        ${generateSparkline(history.rx, 80, 20, '#00bcd4')}
+                    </div>
+                    <div class="pm-spark-box">
+                        <div class="pm-spark-header"><span class="pm-spark-label">NET UP</span><span class="pm-value">${formatBytes(stats.io.network.tx_sec)}/s</span></div>
+                        ${generateSparkline(history.tx, 80, 20, '#9c27b0')}
+                    </div>
+                </div>
+            `;
+            }
+            else if (id === 'process') {
+                html = `
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px; font-size:10px">
+                    <div><span style="color:#666">PID:</span> <span class="pm-value">${stats.nodeRed.pid}</span></div>
+                    <div style="text-align:right"><span style="color:#666">UPTIME:</span> <span class="pm-value">${formatUptime(stats.nodeRed.uptime)}</span></div>
+                </div>
+            `;
+            }
+
+            body.innerHTML = html;
+        }
+
+        function progressBar(label, percent, valueText, max = 100) {
+            const p = Math.min((percent / max) * 100, 100);
+            return `
+            <div class="pm-grid-row">
+                <span>${label}</span>
+                <div class="pm-bar-container">
+                    <div class="pm-bar-fill ${getStatusClass(p)}" style="width:${p}%"></div>
+                </div>
+                <span class="pm-value" style="text-align:right">${valueText}</span>
+            </div>
+        `;
+        }
+
+        // API Handling
+        async function fetchStats() {
+            if (isPaused) return;
+            try {
+                const res = await fetch('performance-monitor/stats');
+                const data = await res.json();
+                if (data.error) return;
+                renderSections(data);
+                updateHeaderWidget(data); // V4 Update
+            } catch (e) {
+                document.getElementById('pm-connection-status').textContent = "OFFLINE";
+                document.getElementById('pm-connection-status').style.color = "#f44336";
+            }
+        }
+
+        // Init Logic
+        async function loadSettings() {
+            try {
+                const res = await fetch('performance-monitor/settings');
+                const data = await res.json();
+                // Merge defaults
+                settings = { ...settings, ...data };
+                applyTheme(settings.theme || 'auto');
+                restartTimer();
+            } catch (e) { }
+        }
+
+        function restartTimer() {
+            if (pollTimer) clearInterval(pollTimer);
+            pollTimer = setInterval(fetchStats, settings.refreshInterval);
+        }
+
+        // Initialization object
+        RED.performanceMonitor = {
+            toggle: (id) => document.getElementById(`pm-sec-${id}`).classList.toggle('collapsed'),
+            openSettings: showSettingsPanel,
+            closeSettings: () => document.getElementById('pm-settings-overlay')?.remove(),
+            saveSettings: async () => {
+                const interval = document.getElementById('pm-setting-interval').value;
+                const theme = document.getElementById('pm-setting-theme').value;
+
+                await fetch('performance-monitor/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refreshInterval: interval, theme: theme })
+                });
+
+                settings.refreshInterval = interval;
+                settings.theme = theme;
+
+                applyTheme(theme);
+                restartTimer();
+                RED.performanceMonitor.closeSettings();
+            },
+            togglePause: () => {
+                isPaused = !isPaused;
+                const btn = document.getElementById('pm-btn-pause');
+                btn.textContent = isPaused ? "RESUME" : "PAUSE";
+                btn.classList.toggle('active');
+            },
+            resetBaseline: () => {
+                sessionRec.peakRam = 0; // Reset Peak
+                // Force refetch
+                fetchStats();
+            },
+            refresh: fetchStats
+        };
+
+        RED.sidebar.addTab({
+            id: 'performance-monitor',
+            label: 'perf', // Keep label short
+            name: 'Tech HUD Monitor',
+            iconClass: 'fa fa-terminal', // Changed icon to match theme
+            content: buildSidebarContent(),
+            enableOnEdit: true
+        });
+
+        // V4: Inject Header Widget on Init
+        injectHeaderWidget();
+
+        loadSettings();
+        restartTimer();
+    })();
+</script>
