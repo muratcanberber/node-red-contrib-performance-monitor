@@ -2,7 +2,7 @@
 
 A high-fidelity performance monitoring extension for Node-RED that provides a **"Tech HUD"** sidebar and a **Persistent Header Stats Bar**. Designed for developers who need real-time, glanceable insights into their Node-RED instance's resource usage.
 
-![V4 Developer HUD](/home/mcb/.gemini/antigravity/brain/dd30c223-8445-4799-8bfb-a9ab984463a1/v4_developer_hud_final_1768911148172.png)
+![V4 Developer HUD](v4_developer_hud_final_1768911148172.png)
 *(Note: Floating stats bar visible in the top header)*
 
 ## Features
