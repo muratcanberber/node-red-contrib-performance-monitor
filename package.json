@@ -1,8 +1,11 @@
 {
   "name": "node-red-contrib-performance-monitor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A dark-themed Node-RED sidebar plugin that provides real-time system performance metrics and a persistent developer HUD.",
   "main": "performance-monitor.js",
+  "scripts": {
+    "test": "echo \"No test specified\" && exit 0"
+  },
   "keywords": [
     "node-red",
     "sidebar",
