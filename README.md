@@ -58,3 +58,9 @@ Click the **CONFIG** button in the sidebar to:
 ## License
 
 MIT License.
+
+## Support
+
+If you like this project, please support me!
+
+<a href="https://buymeacoffee.com/muratcanberber" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
