@@ -1,35 +1,55 @@
-# Node-RED Performance Monitor (Developer HUD)
+# Node-RED Performance Monitor
 
-A high-fidelity performance monitoring extension for Node-RED that provides a **"Tech HUD"** sidebar and a **Persistent Header Stats Bar**. Designed for developers who need real-time, glanceable insights into their Node-RED instance's resource usage.
+![Performance Monitor Hero](/Users/muratcanberber/Dev/Project/node-red-contrib-performance-monitor/main.png)
 
-![V4 Developer HUD](v4_developer_hud_final_1768911148172.png)
-*(Note: Floating stats bar visible in the top header)*
+A powerful, native **Performance Monitor** sidebar for Node-RED. It provides real-time visibility into your Node-RED instance's health and system resources with a beautiful, integrated design.
 
-## Features
+**v1.1.0 - The Precision & UI Update**
+- 🚀 **Zero Dependencies** (No binary compilation required)
+- 🖥️ **Cross-Platform** (macOS, Windows, Linux, Alpine, Raspberry Pi)
+- 🎨 **Component-Level Theming** (Matches your Node-RED theme)
 
-### 1. Persistent Developer HUD (Top Bar)
-A transparent, always-visible widget injected into the Node-RED editor header.
-*   **CPU Load**: Real-time system CPU percentage.
-*   **Stacked RAM Bar**: "Ingenious" visualization showing:
-    *   **Bright**: Node-RED Heap Used (e.g., 64MB)
-    *   **Dim**: Other System Memory
-    *   **Empty**: Free Capacity
-*   **Session Peak (Initial Tracking)**:
-    *   Tracks the **High Watermark** of memory usage (`↑ 180MB`).
-    *   Helps detect memory leaks or resource spikes.
-    *   **Click to Reset**: Reset the peak counter to current usage.
+---
 
-### 2. Tech HUD Sidebar
-A completely redesigned sidebar tab with a flat, data-dense "Tech HUD" aesthetic.
-*   **Sparklines**: Real-time SVG charts for **Disk I/O** (Read/Write) and **Network Traffic** (Up/Down).
-*   **Progress Bars**: Slim, color-coded bars (Green/Yellow/Red) for CPU, RAM, and Disk usage.
-*   **Context Aware**: Clearly distinguishes between total system load and Node-RED's specific contribution.
+## ✨ Features
 
-### 3. Theme Support
-*   **Modes**: **Dark** (Default), **Light**, and **Auto** (System Sync).
-*   **Configurable**: Toggle themes via the sidebar Settings panel.
+### 🔍 Real-Time Monitoring
+Monitor key metrics with sub-second precision:
+- **CPU Load**: Diff-based process usage calculation.
+- **Memory**: Detailed heap and RSS tracking to spot leaks.
+- **Event Loop Lag**: Millisecond-level latency detection.
+- **System Hardware**: Full system CPU, RAM, and Disk usage with live sparkline history.
 
-## Installation
+### 📐 Smart Sidebar
+The sidebar is designed for efficiency.
+
+#### Expanded Mode
+Detailed view with progress bars, precise values, and history charts.
+![Extended View](/Users/muratcanberber/Dev/Project/node-red-contrib-performance-monitor/pm_sidebar_extended.png)
+
+#### Mini Mode
+Collapse any section to save space. The **Live Value** stays visible in the header, and the **Chart** remains active.
+![Collapsed View](/Users/muratcanberber/Dev/Project/node-red-contrib-performance-monitor/pm_sidebar_closed.png)
+
+---
+
+## 🎨 Themes
+
+Includes 4 stunning themes that layer on top of your Node-RED colors.
+
+| **Classic** | **Funky** |
+| :---: | :---: |
+| ![Classic](/Users/muratcanberber/Dev/Project/node-red-contrib-performance-monitor/pm_theme_classic.png) | ![Funky](/Users/muratcanberber/Dev/Project/node-red-contrib-performance-monitor/pm_theme_funky.png) |
+| *Seamless Integration* | *Vibrant & Playful* |
+
+| **Matrix** | **Cyberpunk** |
+| :---: | :---: |
+| ![Matrix](/Users/muratcanberber/Dev/Project/node-red-contrib-performance-monitor/pm_theme_matrix.png) | ![Cyberpunk](/Users/muratcanberber/Dev/Project/node-red-contrib-performance-monitor/pm_theme_cyberpunk.png) |
+| *Terminal Code Esthetic* | *Neon Future Style* |
+
+---
+
+## 📦 Installation
 
 Run the following command in your Node-RED user directory (typically `~/.node-red`):
 
@@ -37,30 +57,16 @@ Run the following command in your Node-RED user directory (typically `~/.node-re
 npm install node-red-contrib-performance-monitor
 ```
 
-Restart Node-RED:
+Restart Node-RED, and you will see a new **Dashboard** icon in the sidebar designated for Performance Monitoring.
 
-```bash
-node-red
-```
+---
 
-## Usage
+## 🔧 Configuration
 
-1.  Open the Node-RED Editor (`http://localhost:1880`).
-2.  Open the **Sidebar** and select the **Performance** tab (Terminal Icon `>_`).
-3.  The **Header Widget** will automatically appear in the top bar.
+Access settings by clicking the **Settings** button in the sidebar toolbar.
+- **Refresh Rate**: Adjust polling interval (default: 2s).
+- **HUD Widget**: Toggle the top header widget visibility.
+- **Theme Selection**: Choose your preferred visual style.
 
-## Configuration
-
-Click the **CONFIG** button in the sidebar to:
-*   Change the **Refresh Interval** (1s - 5s).
-*   Switch **Themes** (Dark / Light / Auto).
-
-## License
-
-MIT License.
-
-## Support
-
-If you like this project, please support me!
-
-<a href="https://buymeacoffee.com/muratcanberber" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
+## 🤝 License
+MIT

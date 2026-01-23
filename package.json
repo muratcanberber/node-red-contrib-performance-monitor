@@ -1,10 +1,10 @@
 {
   "name": "node-red-contrib-performance-monitor",
-  "version": "1.0.1",
-  "description": "A dark-themed Node-RED sidebar plugin that provides real-time system performance metrics and a persistent developer HUD.",
+  "version": "1.1.0",
+  "description": "A Node-RED sidebar plugin that provides real-time system performance metrics with native theme integration and zero native dependencies.",
   "main": "performance-monitor.js",
   "scripts": {
-    "test": "echo \"No test specified\" && exit 0"
+    "test": "mocha test/**/*.js --timeout 10000"
   },
   "keywords": [
     "node-red",
@@ -13,9 +13,12 @@
     "monitor",
     "cpu",
     "ram",
+    "memory",
+    "event-loop",
     "dashboard",
     "developer",
-    "hud"
+    "hud",
+    "metrics"
   ],
   "author": "Murat Can Berber",
   "license": "MIT",
@@ -25,8 +28,9 @@
       "performance-monitor": "performance-monitor.js"
     }
   },
-  "dependencies": {
-    "systeminformation": "^5.21.22"
+  "devDependencies": {
+    "mocha": "^10.2.0",
+    "sinon": "^17.0.1"
   },
   "engines": {
     "node": ">=14.0.0"

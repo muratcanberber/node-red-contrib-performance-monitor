@@ -1,54 +1,130 @@
+<!-- Performance Monitor Sidebar Plugin v2.1.0 -->
 <script type="text/javascript">
     (function () {
         'use strict';
 
-        // Performance Monitor Sidebar Plugin V5 - Developer HUD & Theming
+        // Performance Monitor Sidebar Plugin v2.1.0 - Themed HUD with Tooltips
         let settings = {
             refreshInterval: 2000,
-            theme: 'auto'
+            paneFontSize: 12,
+            paneFontFamily: 'Helvetica Neue',
+            hudSize: 'Normal',
+            hudTheme: 'classic',
+            hideHud: false
         };
+
         let pollTimer = null;
         let isPaused = false;
 
-        // Theme Logic
-        const themes = {
-            dark: {
-                '--pm-bg': '#1e1e1e', '--pm-bg-sec': '#252525', '--pm-bg-head': 'rgba(0,0,0,0.5)',
-                '--pm-text': '#ccc', '--pm-text-muted': '#666', '--pm-text-bright': '#fff',
-                '--pm-accent': '#00bcd4', '--pm-border': '#333', '--pm-bar-bg': '#333',
-                '--pm-good': '#4caf50', '--pm-warn': '#ff9800', '--pm-crit': '#f44336'
+        // HUD Theme Definitions - All inherit Node-RED base theme
+        const hudThemes = {
+            classic: {
+                name: 'Classic',
+                description: 'Sleek, minimal design that blends with Node-RED',
+                icon: '◈',
+                styles: {
+                    background: 'var(--red-ui-secondary-background, rgba(255,255,255,0.95))',
+                    border: 'var(--red-ui-secondary-border-color, #ccc)',
+                    text: 'var(--red-ui-text-color-primary, #333)',
+                    accent: 'var(--red-ui-text-color-link, #0066cc)',
+                    shadow: '0 2px 8px rgba(0,0,0,0.1)',
+                    iconFilter: 'none',
+                    fontWeight: '500'
+                }
             },
-            light: {
-                '--pm-bg': '#f3f3f3', '--pm-bg-sec': '#fff', '--pm-bg-head': 'rgba(255,255,255,0.85)',
-                '--pm-text': '#333', '--pm-text-muted': '#555', '--pm-text-bright': '#000',
-                '--pm-accent': '#00796b', '--pm-border': '#ccc', '--pm-bar-bg': '#e0e0e0',
-                '--pm-good': '#2e7d32', '--pm-warn': '#ef6c00', '--pm-crit': '#c62828'
+            funky: {
+                name: 'Funky',
+                description: 'Energetic, playful design with vibrant icons',
+                icon: '🎨',
+                styles: {
+                    background: 'linear-gradient(135deg, var(--red-ui-secondary-background, #fff) 0%, var(--red-ui-tertiary-background, #f0f0f0) 100%)',
+                    border: 'var(--red-ui-text-color-link, #0066cc)',
+                    text: 'var(--red-ui-text-color-primary, #333)',
+                    accent: '#ff6b6b',
+                    shadow: '0 4px 15px rgba(255,107,107,0.2)',
+                    iconFilter: 'hue-rotate(330deg) saturate(1.5)',
+                    fontWeight: '600',
+                    borderRadius: '12px'
+                }
+            },
+            matrix: {
+                name: 'Matrix',
+                description: 'Green terminal aesthetic inspired by the Matrix',
+                icon: '💻',
+                styles: {
+                    background: 'linear-gradient(180deg, rgba(10,25,10,0.98) 0%, rgba(5,15,5,0.99) 100%)',
+                    border: '#33cc55',
+                    text: '#44dd66',
+                    accent: '#33cc55',
+                    shadow: '0 2px 10px rgba(0,180,60,0.15)',
+                    iconFilter: 'none',
+                    fontWeight: '500',
+                    fontFamily: '"Courier New", "Monaco", monospace',
+                    textShadow: 'none'
+                }
+            },
+            neon: {
+                name: 'Neon Cyberpunk',
+                description: 'Futuristic neon style with cyberpunk vibes',
+                icon: '⚡',
+                styles: {
+                    background: 'linear-gradient(135deg, rgba(25,10,45,0.98) 0%, rgba(35,15,55,0.99) 100%)',
+                    border: '#cc66ff',
+                    text: '#66ddff',
+                    accent: '#cc66ff',
+                    shadow: '0 2px 12px rgba(180,80,220,0.2)',
+                    iconFilter: 'none',
+                    fontWeight: '500',
+                    textShadow: 'none'
+                }
             }
         };
 
-        function applyTheme(themeName) {
-            let t = themeName;
-            if (t === 'auto') {
-                t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        // Metric Tooltips - Brief explanations
+        const metricTooltips = {
+            cpu: {
+                title: 'CPU Usage',
+                description: 'Percentage of CPU time used by the Node-RED process. High values (>70%) may indicate heavy flow processing or infinite loops.',
+                good: '< 30%',
+                warn: '30-70%',
+                crit: '> 70%'
+            },
+            memory: {
+                title: 'Memory (RSS)',
+                description: 'Resident Set Size - actual RAM used by Node-RED. Includes heap, stack, and code. Steadily rising values may indicate a memory leak.',
+                good: 'Stable',
+                warn: 'Rising slowly',
+                crit: 'Rising fast'
+            },
+            lag: {
+                title: 'Event Loop Lag',
+                description: 'Time between scheduling a task and its execution. High lag means the event loop is blocked, causing slow response times.',
+                good: '< 10ms',
+                warn: '10-50ms',
+                crit: '> 50ms'
+            },
+            peak: {
+                title: 'Session Peak RAM',
+                description: 'Highest memory usage since Node-RED started. Useful for identifying memory spikes. Pulsing indicates potential memory leak.',
+                tip: 'Click to reset'
             }
-            const colors = themes[t] || themes.dark;
-            const root = document.documentElement;
-            Object.keys(colors).forEach(key => root.style.setProperty(key, colors[key]));
-        }
-
-        // History for Sparklines (store last 20 points)
-        const history = {
-            read: new Array(20).fill(0),
-            write: new Array(20).fill(0),
-            rx: new Array(20).fill(0),
-            tx: new Array(20).fill(0)
         };
 
-        // Session Peak Tracker (High Watermark)
+        // Session Peak Tracker
         const sessionRec = {
             peakRam: 0,
             historyRam: [],
             isLeaking: false
+        };
+
+        // History for Sparklines (last 20 points)
+        const history = {
+            cpu: new Array(20).fill(0),
+            memory: new Array(20).fill(0),
+            lag: new Array(50).fill(0),
+            sysCpu: new Array(50).fill(0),
+            sysRam: new Array(50).fill(0),
+            sysDisk: new Array(50).fill(0)
         };
 
         // Helper: Format bytes
@@ -66,36 +142,142 @@
             const hours = Math.floor((seconds % 86400) / 3600);
             const mins = Math.floor((seconds % 3600) / 60);
             if (days > 0) return `${days}d ${hours}h ${mins}m`;
-            return `${hours}h ${mins}m`;
+            if (hours > 0) return `${hours}h ${mins}m`;
+            return `${mins}m`;
         }
 
-        // Helper: Get color based on usage thresholds
+        // Helper: Get status class based on thresholds
         function getStatusClass(percent) {
             if (percent < 70) return 'pm-status-good';
             if (percent < 90) return 'pm-status-warn';
             return 'pm-status-crit';
         }
 
-        // Sparkline Generator
-        function generateSparkline(dataPoints, width = 100, height = 25, color = '#00bcd4') {
-            const max = Math.max(...dataPoints, 1); // Avoid div by zero
-            const step = width / (dataPoints.length - 1);
+        // Helper: Get lag status class
+        function getLagStatusClass(lagMs) {
+            if (lagMs < 10) return 'pm-status-good';
+            if (lagMs < 50) return 'pm-status-warn';
+            return 'pm-status-crit';
+        }
 
-            // Build points string
+        // Sparkline Generator
+        // Sparkline Generator with Axes
+        function generateSparkline(dataPoints, width = 100, height = 35, colorVar = '--red-ui-text-color-link') {
+            const max = Math.max(...dataPoints, 1);
+            // Reserve left 25px for Y-axis labels, bottom 10px for X-axis
+            const chartW = width - 25;
+            const chartH = height - 10;
+            const step = chartW / (dataPoints.length > 1 ? dataPoints.length - 1 : 1);
+
             const points = dataPoints.map((val, i) => {
-                const x = i * step;
-                const y = height - (val / max * height);
+                const x = 25 + (i * step);
+                const y = chartH - (val / max * chartH);
                 return `${x},${y}`;
             }).join(' ');
 
             return `
-            <svg width="${width}" height="${height}" class="pm-sparkline">
-                <polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-        `;
+                <svg width="${width}" height="${height}" class="pm-sparkline" style="overflow:visible">
+                    <!-- Axes -->
+                    <line x1="25" y1="0" x2="25" y2="${chartH}" stroke="var(--red-ui-secondary-border-color, #ccc)" stroke-width="1" shape-rendering="crispEdges"/>
+                    <line x1="25" y1="${chartH}" x2="${width}" y2="${chartH}" stroke="var(--red-ui-secondary-border-color, #ccc)" stroke-width="1" shape-rendering="crispEdges"/>
+                    
+                    <!-- Line -->
+                    <polyline points="${points}" fill="none" stroke="var(${colorVar})" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    
+                    <!-- Labels -->
+                    <text x="22" y="8" text-anchor="end" font-size="8" fill="var(--red-ui-text-color-secondary, #888)">${Math.round(max)}</text>
+                    <text x="22" y="${chartH}" text-anchor="end" font-size="8" fill="var(--red-ui-text-color-secondary, #888)">0</text>
+                </svg>
+            `;
         }
 
-        // Header Widget Injection (V6 - Peak RAM)
+        // Tooltips removed for cleaner UI
+        function createTooltip(metric) {
+            return '';
+        }
+
+        // Apply HUD theme
+        function applyHudTheme() {
+            const widget = document.getElementById('pm-header-widget');
+            if (!widget) return;
+
+            const theme = hudThemes[settings.hudTheme] || hudThemes.classic;
+            const s = theme.styles;
+
+            widget.style.background = s.background;
+            widget.style.borderColor = s.border;
+            widget.style.color = s.text;
+            widget.style.boxShadow = s.shadow;
+            widget.style.fontWeight = s.fontWeight || '500';
+
+            if (s.fontFamily) {
+                widget.style.fontFamily = s.fontFamily;
+            }
+            if (s.textShadow) {
+                widget.style.textShadow = s.textShadow;
+            }
+            if (s.borderRadius) {
+                widget.style.borderRadius = `0 0 ${s.borderRadius} ${s.borderRadius}`;
+            }
+            if (s.animation) {
+                widget.style.animation = s.animation;
+            } else {
+                widget.style.animation = 'none';
+            }
+
+            // Apply icon filter
+            const icons = widget.querySelectorAll('i.fa');
+            icons.forEach(icon => {
+                icon.style.filter = s.iconFilter || 'none';
+            });
+
+            // Update accent colors for bars and values
+            const accentEls = widget.querySelectorAll('.pm-rs-nr');
+            accentEls.forEach(el => {
+                el.style.background = s.accent;
+            });
+        }
+
+        function applyHudSize() {
+            const widget = document.getElementById('pm-header-widget');
+            if (!widget) return;
+
+            widget.classList.remove('pm-hud-compact', 'pm-hud-large');
+            if (settings.hudSize === 'Compact') {
+                widget.classList.add('pm-hud-compact');
+            } else if (settings.hudSize === 'Large') {
+                widget.classList.add('pm-hud-large');
+            }
+        }
+
+        // Apply custom styles from settings
+        function applyCustomStyles() {
+            const container = document.getElementById('pm-container');
+            if (!container) return;
+
+            // Calculate sizes based on hudSize
+            const sizes = {
+                'Compact': { fontSize: settings.paneFontSize - 2, padding: 6, gap: 4 },
+                'Normal': { fontSize: settings.paneFontSize, padding: 10, gap: 8 },
+                'Large': { fontSize: settings.paneFontSize + 2, padding: 14, gap: 12 }
+            };
+            const size = sizes[settings.hudSize] || sizes['Normal'];
+
+            container.style.setProperty('--pm-font-size', size.fontSize + 'px');
+            container.style.setProperty('--pm-font-family', settings.paneFontFamily);
+            container.style.setProperty('--pm-padding', size.padding + 'px');
+            container.style.setProperty('--pm-gap', size.gap + 'px');
+        }
+
+        // Toggle HUD visibility
+        function toggleHudVisibility() {
+            const widget = document.getElementById('pm-header-widget');
+            if (widget) {
+                widget.style.display = settings.hideHud ? 'none' : 'flex';
+            }
+        }
+
+        // Header Widget Injection
         function injectHeaderWidget() {
             const header = document.getElementById('red-ui-header') || document.getElementById('header');
             if (!header) return;
@@ -104,98 +286,212 @@
 
             const widget = document.createElement('div');
             widget.id = 'pm-header-widget';
-            // HTML Structure: CPU | Stacked RAM Bar | Peak
             widget.innerHTML = `
-            <div class="pm-hw-group" title="CPU Load">
-                <i class="fa fa-microchip"></i> <span id="pm-hw-cpu">--%</span>
-            </div>
-            <div class="pm-hw-sep"></div>
-            <div class="pm-hw-group pm-hw-ram-group" title="RAM: Node-RED (Bright) | System (Dim) | Free (Empty)">
-                <i class="fa fa-memory"></i>
-                <div class="pm-ram-stack">
-                    <div id="pm-ram-nr" class="pm-rs-bar pm-rs-nr"></div>
-                    <div id="pm-ram-sys" class="pm-rs-bar pm-rs-sys"></div>
+                <div class="pm-hw-group pm-has-tooltip" data-metric="cpu">
+                    <i class="fa fa-microchip"></i> <span id="pm-hw-cpu">--%</span>
+                    ${createTooltip('cpu')}
                 </div>
-                <span id="pm-hw-ram-text" class="pm-hw-mini-text">--/--</span>
-            </div>
-            <div class="pm-hw-sep"></div>
-            <div class="pm-hw-group pm-hw-peak" id="pm-hw-peak" title="Session Peak RAM (High Watermark)">
-                <i class="fa fa-arrow-up"></i> <span id="pm-hw-peak-val">--</span>
-            </div>
-        `;
+                <div class="pm-hw-sep"></div>
+                <div class="pm-hw-group pm-hw-ram-group pm-has-tooltip" data-metric="memory">
+                    <i class="fa fa-memory"></i>
+                    <div class="pm-ram-stack">
+                        <div id="pm-ram-nr" class="pm-rs-bar pm-rs-nr"></div>
+                    </div>
+                    <span id="pm-hw-ram-text" class="pm-hw-mini-text">--</span>
+                    ${createTooltip('memory')}
+                </div>
+                <div class="pm-hw-sep"></div>
+                <div class="pm-hw-group pm-has-tooltip" data-metric="lag">
+                    <i class="fa fa-clock-o"></i> <span id="pm-hw-lag">--ms</span>
+                    ${createTooltip('lag')}
+                </div>
+                <div class="pm-hw-sep"></div>
+                <div class="pm-hw-group pm-hw-peak pm-has-tooltip" id="pm-hw-peak" data-metric="peak" onclick="RED.performanceMonitor.resetPeak()">
+                    <i class="fa fa-arrow-up"></i> <span id="pm-hw-peak-val">--</span>
+                    ${createTooltip('peak')}
+                </div>
+            `;
 
             const style = document.createElement('style');
+            style.id = 'pm-header-style';
             style.textContent = `
-            #pm-header-widget {
-                position: absolute; top: 0; left: 50%; transform: translateX(-50%);
-                height: 40px; display: flex; align-items: center;
-                background: var(--pm-bg-head, rgba(0,0,0,0.3));
-                backdrop-filter: blur(4px);
-                border-radius: 0 0 8px 8px; padding: 0 15px;
-                color: var(--pm-text-bright); /* Force bright/visible text */
-                font-family: 'Consolas', monospace; font-size: 12px; font-weight: bold;
-                z-index: 999; border: 1px solid var(--pm-border); border-top: none;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            }
-            .pm-hw-group { display: flex; align-items: center; gap: 6px; }
-            .pm-hw-sep { height: 16px; width: 1px; background: var(--pm-border); margin: 0 10px; }
+                #pm-header-widget {
+                    position: absolute;
+                    top: 0;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    height: 40px;
+                    display: flex;
+                    align-items: center;
+                    background: var(--red-ui-secondary-background, rgba(255,255,255,0.95));
+                    backdrop-filter: blur(8px);
+                    -webkit-backdrop-filter: blur(8px);
+                    border-radius: 0 0 8px 8px;
+                    padding: 0 15px;
+                    color: var(--red-ui-text-color-primary, #333);
+                    font-family: var(--red-ui-primary-font, 'Helvetica Neue', Arial, sans-serif);
+                    font-size: 12px;
+                    font-weight: 500;
+                    z-index: 999;
+                    border: 1px solid var(--red-ui-secondary-border-color, #ccc);
+                    border-top: none;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                }
 
-            /* Stacked RAM Bar */
-            .pm-ram-stack {
-                width: 80px; height: 8px; background: rgba(100,100,100,0.2);
-                border-radius: 2px; display: flex; overflow: hidden; position: relative;
-            }
-            .pm-rs-bar { height: 100%; transition: width 0.5s ease; }
-            .pm-rs-nr { background: var(--pm-accent); box-shadow: 0 0 4px var(--pm-accent); z-index: 2; }
-            .pm-rs-sys { background: var(--pm-text-muted); opacity: 0.5; z-index: 1; }
+                #pm-header-widget.pm-hud-compact {
+                    height: 32px;
+                    padding: 0 10px;
+                    font-size: 10px;
+                }
+                #pm-header-widget.pm-hud-compact .pm-hw-sep { height: 12px; margin: 0 6px; }
+                #pm-header-widget.pm-hud-compact .pm-ram-stack { width: 40px; height: 6px; }
+                #pm-header-widget.pm-hud-compact .pm-hw-mini-text { font-size: 9px; min-width: 40px; }
 
-            .pm-hw-mini-text { font-size: 11px; color: var(--pm-text); min-width: 60px; text-align: right; }
+                #pm-header-widget.pm-hud-large {
+                    height: 50px;
+                    padding: 0 20px;
+                    font-size: 14px;
+                }
+                #pm-header-widget.pm-hud-large .pm-hw-sep { height: 20px; margin: 0 14px; }
+                #pm-header-widget.pm-hud-large .pm-ram-stack { width: 80px; height: 10px; }
+                #pm-header-widget.pm-hud-large .pm-hw-mini-text { font-size: 13px; min-width: 60px; }
 
-            .pm-hw-peak { cursor: help; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,0.05); }
-            .pm-peak-val { color: var(--pm-warn); }
-            .pm-leak-warn { animation: pm-pulse 2s infinite; color: var(--pm-crit); font-weight: bold; }
-            @keyframes pm-pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
-        `;
+                .pm-hw-group {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    position: relative;
+                    cursor: default;
+                }
+                .pm-hw-sep {
+                    height: 16px;
+                    width: 1px;
+                    background: currentColor;
+                    opacity: 0.3;
+                    margin: 0 10px;
+                }
+                .pm-ram-stack {
+                    width: 60px;
+                    height: 8px;
+                    background: currentColor;
+                    opacity: 0.2;
+                    border-radius: 4px;
+                    overflow: hidden;
+                }
+                .pm-rs-bar {
+                    height: 100%;
+                    transition: width 0.5s ease;
+                    opacity: 1;
+                }
+                .pm-rs-nr {
+                    background: var(--red-ui-text-color-link, #0066cc);
+                }
+                .pm-hw-mini-text {
+                    font-size: 11px;
+                    opacity: 0.8;
+                    min-width: 50px;
+                }
+                .pm-hw-peak {
+                    cursor: pointer;
+                    padding: 4px 8px;
+                    border-radius: 4px;
+                    background: rgba(128,128,128,0.15);
+                    opacity: 1;
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                }
+                .pm-hw-peak:hover {
+                    background: rgba(128,128,128,0.25);
+                }
+                .pm-hw-peak span,
+                .pm-hw-peak i {
+                    opacity: 1;
+                }
+                .pm-leak-warn {
+                /* Tooltip Styles Removed */
+                }
+                .pm-tooltip::before {
+                    content: '';
+                    position: absolute;
+                    top: -6px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    border-left: 6px solid transparent;
+                    border-right: 6px solid transparent;
+                    border-bottom: 6px solid var(--red-ui-secondary-border-color, #ccc);
+                }
+                .pm-tooltip::after {
+                    content: '';
+                    position: absolute;
+                    top: -5px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    border-left: 5px solid transparent;
+                    border-right: 5px solid transparent;
+                    border-bottom: 5px solid var(--red-ui-primary-background, #fff);
+                }
+
+                    color: var(--red-ui-text-color-secondary, #666);
+                    margin-bottom: 8px;
+                }
+                .pm-tooltip-thresholds {
+                    display: flex;
+                    gap: 10px;
+                    font-size: 10px;
+                    padding-top: 8px;
+                    border-top: 1px solid var(--red-ui-tertiary-border-color, #eee);
+                }
+                .pm-tooltip-tip {
+                    font-size: 10px;
+                    color: var(--red-ui-text-color-warning, #ef6c00);
+                    margin-top: 6px;
+                }
+
+                .pm-status-good { color: var(--red-ui-text-color-success, #2e7d32) !important; }
+                .pm-status-warn { color: var(--red-ui-text-color-warning, #ef6c00) !important; }
+                .pm-status-crit { color: var(--red-ui-text-color-error, #c62828) !important; }
+            `;
             document.head.appendChild(style);
             header.appendChild(widget);
+
+            // Apply theme and visibility
+            applyHudTheme();
+            toggleHudVisibility();
         }
 
         function updateHeaderWidget(stats) {
             const cpuEl = document.getElementById('pm-hw-cpu');
             const nrBar = document.getElementById('pm-ram-nr');
-            const sysBar = document.getElementById('pm-ram-sys');
             const ramText = document.getElementById('pm-hw-ram-text');
+            const lagEl = document.getElementById('pm-hw-lag');
             const peakEl = document.getElementById('pm-hw-peak-val');
             const peakContainer = document.getElementById('pm-hw-peak');
 
-            if (!cpuEl || !stats || !stats.system || !stats.nodeRed) return;
+            if (!cpuEl || !stats || !stats.nodeRed) return;
 
             // CPU
-            const cpuVal = stats.system.cpu || 0;
+            const cpuVal = stats.nodeRed.cpu || 0;
             cpuEl.textContent = cpuVal.toFixed(1) + '%';
+            cpuEl.className = getStatusClass(cpuVal);
 
-            // RAM Stacked Bar Logic
-            const totalMem = stats.system.memory.total || 1; // Prevent div/0
-            const nrMem = stats.nodeRed.memory.heapUsed || 0;
-            const sysMemTotal = stats.system.memory.used || 0;
-            const otherSysMem = Math.max(0, sysMemTotal - nrMem); // Safety check
-
+            // RAM Bar
+            const totalMem = stats.system.memory.total || 1;
+            const nrMem = stats.nodeRed.memory.rss || 0;
             const nrPct = (nrMem / totalMem) * 100;
-            const otherPct = (otherSysMem / totalMem) * 100;
 
-            // Safety: Ensure valid numbers for CSS
-            nrBar.style.width = (isNaN(nrPct) ? 0 : nrPct) + '%';
-            sysBar.style.width = (isNaN(otherPct) ? 0 : otherPct) + '%';
+            nrBar.style.width = (isNaN(nrPct) ? 0 : Math.min(nrPct * 10, 100)) + '%';
+            ramText.textContent = formatBytes(nrMem, 1);
 
-            // Text: "NR_USED" (Made primarily visible as requested)
-            ramText.textContent = `${formatBytes(nrMem, 1)}`;
-            ramText.title = `Node-RED: ${formatBytes(nrMem)} / System Total: ${formatBytes(totalMem)}`;
+            // Event Loop Lag
+            const lag = stats.nodeRed.eventLoopLag || 0;
+            lagEl.textContent = lag.toFixed(2) + 'ms';
+            lagEl.className = getLagStatusClass(lag);
 
-            // Peak / High Watermark Logic
+            // Peak / High Watermark
             if (nrMem > sessionRec.peakRam) {
                 sessionRec.peakRam = nrMem;
             }
-
             peakEl.textContent = formatBytes(sessionRec.peakRam);
 
             updateLeakDetection(nrMem, peakContainer);
@@ -205,276 +501,766 @@
             sessionRec.historyRam.push(currentRam);
             if (sessionRec.historyRam.length > 150) sessionRec.historyRam.shift();
 
-            // Simple heuristic: Strict increase check over last 20 samples
             if (sessionRec.historyRam.length >= 20) {
                 const recent = sessionRec.historyRam.slice(-10);
-                // Safety: filter undefined
                 if (recent.some(isNaN)) return;
 
                 const isRising = recent.every((val, i, arr) => i === 0 || val >= arr[i - 1]);
 
-                // Warn if rising AND near peak
                 if (isRising && (currentRam >= sessionRec.peakRam * 0.99)) {
                     el.classList.add('pm-leak-warn');
-                    el.title = "Warning: RAM Rising Steadily (Potential Leak)";
                 } else {
                     el.classList.remove('pm-leak-warn');
                 }
             }
         }
 
-        // Settings Panel UI (V5)
+        // Settings Panel
         function showSettingsPanel() {
-            // ... (Cleanup old overlay if exists)
             document.getElementById('pm-settings-overlay')?.remove();
+
+            const themeOptionsHtml = Object.entries(hudThemes).map(([key, theme]) =>
+                `<option value="${key}" ${settings.hudTheme === key ? 'selected' : ''}>${theme.icon} ${theme.name}</option>`
+            ).join('');
+
+            const themeDescriptions = Object.entries(hudThemes).map(([key, theme]) =>
+                `<div class="pm-theme-preview" data-theme="${key}" style="display: ${key === settings.hudTheme ? 'block' : 'none'}">
+                    <small>${theme.description}</small>
+                </div>`
+            ).join('');
 
             const panel = document.createElement('div');
             panel.id = 'pm-settings-overlay';
             panel.innerHTML = `
-            <div class="pm-settings-modal">
-                <h3>HUD CONFIG</h3>
-                <div class="pm-setting-row">
-                    <label>REFRESH RATE (MS)</label>
-                    <select id="pm-setting-interval">
-                        <option value="1000">1000</option>
-                        <option value="2000">2000</option>
-                        <option value="5000">5000</option>
-                    </select>
+                <div class="pm-settings-modal">
+                    <h3>Performance Monitor Settings</h3>
+                    
+                    <div class="pm-setting-section">
+                        <div class="pm-setting-section-title">General</div>
+                        <div class="pm-setting-row">
+                            <label>Refresh Rate</label>
+                            <select id="pm-setting-interval">
+                                <option value="1000">1 second</option>
+                                <option value="2000">2 seconds</option>
+                                <option value="5000">5 seconds</option>
+                                <option value="10000">10 seconds</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="pm-setting-section">
+                        <div class="pm-setting-section-title">HUD (Header Widget)</div>
+                        <div class="pm-setting-row">
+                            <label>
+                                <input type="checkbox" id="pm-setting-hideHud" ${settings.hideHud ? 'checked' : ''}>
+                                Hide HUD
+                            </label>
+                        </div>
+                        <div class="pm-setting-row">
+                            <label>HUD Theme</label>
+                            <select id="pm-setting-hudTheme">
+                                ${themeOptionsHtml}
+                            </select>
+                        </div>
+                        <div class="pm-setting-row">
+                            <label>HUD Size</label>
+                            <select id="pm-setting-hudWidgetSize">
+                                <option value="Compact" ${settings.hudSize === 'Compact' ? 'selected' : ''}>Compact</option>
+                                <option value="Normal" ${settings.hudSize === 'Normal' ? 'selected' : ''}>Normal</option>
+                                <option value="Large" ${settings.hudSize === 'Large' ? 'selected' : ''}>Large</option>
+                            </select>
+                        </div>
+                        <div id="pm-theme-descriptions">
+                            ${themeDescriptions}
+                        </div>
+                    </div>
+
+                    <div class="pm-setting-section">
+                        <div class="pm-setting-section-title">Sidebar</div>
+                        <div class="pm-setting-row">
+                            <label>Font Size</label>
+                            <input type="number" id="pm-setting-fontSize" min="8" max="24" value="${settings.paneFontSize}"> px
+                        </div>
+                        <div class="pm-setting-row">
+                            <label>Font Family</label>
+                            <select id="pm-setting-fontFamily">
+                                <option value="Helvetica Neue">Helvetica Neue</option>
+                                <option value="Arial">Arial</option>
+                                <option value="Roboto">Roboto</option>
+                                <option value="Inter">Inter</option>
+                                <option value="system-ui">System UI</option>
+                                <option value="Consolas">Consolas</option>
+                            </select>
+                        </div>
+                        <div class="pm-setting-row">
+                            <label>Size</label>
+                            <select id="pm-setting-hudSize">
+                                <option value="Compact">Compact</option>
+                                <option value="Normal">Normal</option>
+                                <option value="Large">Large</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="pm-settings-actions">
+                        <button class="pm-btn-cancel" onclick="RED.performanceMonitor.closeSettings()">Cancel</button>
+                        <button class="pm-btn-save" onclick="RED.performanceMonitor.saveSettings()">Apply</button>
+                    </div>
                 </div>
-                <div class="pm-setting-row">
-                    <label>THEME</label>
-                    <select id="pm-setting-theme">
-                        <option value="auto">AUTO (SYSTEM)</option>
-                        <option value="dark">DARK</option>
-                        <option value="light">LIGHT</option>
-                    </select>
-                </div>
-                <div class="pm-settings-actions">
-                    <button class="pm-btn-cancel" onclick="RED.performanceMonitor.closeSettings()">CANCEL</button>
-                    <button class="pm-btn-save" onclick="RED.performanceMonitor.saveSettings()">APPLY</button>
-                </div>
-            </div>
-        `;
+            `;
             document.body.appendChild(panel);
+
+            // Set current values
             document.getElementById('pm-setting-interval').value = settings.refreshInterval;
-            document.getElementById('pm-setting-theme').value = settings.theme || 'auto';
+            document.getElementById('pm-setting-fontFamily').value = settings.paneFontFamily;
+            document.getElementById('pm-setting-hudSize').value = settings.hudSize;
+
+            // Add theme preview listener
+            document.getElementById('pm-setting-hudTheme').addEventListener('change', function () {
+                const previews = document.querySelectorAll('.pm-theme-preview');
+                previews.forEach(p => p.style.display = 'none');
+                const selected = document.querySelector(`.pm-theme-preview[data-theme="${this.value}"]`);
+                if (selected) selected.style.display = 'block';
+            });
         }
 
-        // Build Sidebar Content (V5 - CSS Variables)
+        // Build Sidebar Content
         function buildSidebarContent() {
             return `
-        <style>
-            /* Tech HUD Theme via CSS Vars */
-            .pm-sidebar {
-                padding: 0; margin: 0;
-                color: var(--pm-text);
-                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-                font-size: 11px;
-                background: var(--pm-bg);
-                height: 100%; overflow-y: auto;
-                transition: background 0.3s, color 0.3s;
-            }
-            .pm-title { color: var(--pm-accent); font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; font-size: 10px; }
-            .pm-value { color: var(--pm-text-bright); font-weight: bold; }
-            .pm-unit { color: var(--pm-text-muted); font-size: 9px; }
+                <style>
+                    /* Performance Monitor - Native Node-RED Theme Integration */
+                    .pm-sidebar {
+                        --pm-font-size: 12px;
+                        --pm-font-family: 'Helvetica Neue', Arial, sans-serif;
+                        --pm-padding: 10px;
+                        --pm-gap: 8px;
+                        
+                        padding: 0;
+                        margin: 0;
+                        font-family: var(--pm-font-family);
+                        font-size: var(--pm-font-size);
+                        color: var(--red-ui-text-color-primary, #333);
+                        background: var(--red-ui-primary-background, #fff);
+                        height: 100%;
+                        overflow-y: auto;
+                    }
 
-            .pm-status-good { background-color: var(--pm-good); }
-            .pm-status-warn { background-color: var(--pm-warn); }
-            .pm-status-crit { background-color: var(--pm-crit); }
+                    .pm-title {
+                        color: var(--red-ui-text-color-link, #0066cc);
+                        font-weight: 600;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                        margin-bottom: 5px;
+                        font-size: calc(var(--pm-font-size) - 2px);
+                    }
 
-            .pm-section {
-                padding: 10px; border-bottom: 1px solid var(--pm-border);
-                background: var(--pm-bg-sec);
-            }
-            .pm-section.draggable { cursor: move; }
-            .pm-section.dragging { opacity: 0.5; border: 1px dashed var(--pm-accent); }
+                    .pm-value {
+                        color: var(--red-ui-text-color-primary, #333);
+                        font-weight: 600;
+                    }
 
-            .pm-section-header { display: flex; justify-content: space-between; cursor: pointer; user-select: none; margin-bottom: 8px; }
-            .pm-section.collapsed .pm-content { display: none; }
+                    .pm-unit {
+                        color: var(--red-ui-text-color-secondary, #666);
+                        font-size: calc(var(--pm-font-size) - 3px);
+                    }
 
-            .pm-grid-row { display: grid; grid-template-columns: 80px 1fr 60px; gap: 8px; align-items: center; margin-bottom: 6px; }
-            .pm-grid-wide { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
+                    .pm-status-good { color: var(--red-ui-text-color-success, #2e7d32); }
+                    .pm-status-warn { color: var(--red-ui-text-color-warning, #ef6c00); }
+                    .pm-status-crit { color: var(--red-ui-text-color-error, #c62828); }
 
-            .pm-bar-container { height: 6px; background: var(--pm-bar-bg); border-radius: 2px; overflow: hidden; }
-            .pm-bar-fill { height: 100%; transition: width 0.3s; }
+                    .pm-bar-good { background-color: var(--red-ui-text-color-success, #4caf50); }
+                    .pm-bar-warn { background-color: var(--red-ui-text-color-warning, #ff9800); }
+                    .pm-bar-crit { background-color: var(--red-ui-text-color-error, #f44336); }
 
-            .pm-spark-box { background: var(--pm-bg); padding: 5px; border: 1px solid var(--pm-border); border-radius: 3px; }
-            .pm-spark-header { display: flex; justify-content: space-between; margin-bottom: 2px; }
-            .pm-spark-label { font-size: 9px; color: var(--pm-text-muted); }
+                    .pm-section {
+                        border: 1px solid var(--red-ui-secondary-border-color, #ccc);
+                        background: var(--red-ui-primary-background, #fff);
+                        margin: 4px 6px;
+                        border-radius: 4px;
+                        overflow: visible;
+                    }
 
-            .pm-toolbar { display: flex; border-bottom: 1px solid var(--pm-border); background: var(--pm-bg-sec); padding: 5px; }
-            .pm-toolbar button { background: none; border: 1px solid var(--pm-border); color: var(--pm-text-muted); padding: 2px 8px; margin-right: 5px; font-family: inherit; font-size: 10px; cursor: pointer; }
-            .pm-toolbar button:hover { border-color: var(--pm-text-muted); color: var(--pm-text); }
-            .pm-toolbar button.active { border-color: var(--pm-accent); color: var(--pm-accent); }
+                    .pm-section-header {
+                        display: flex;
+                        justify-content: space-between;
+                        padding: 4px 8px;
+                        background: var(--red-ui-secondary-background, #f9f9f9);
+                        font-weight: 500;
+                        font-size: 11px;
+                        border-bottom: 1px solid var(--red-ui-secondary-border-color, #eee);
+                        align-items: center;
+                    }
 
-            /* Settings Modal */
-            #pm-settings-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 999; display: flex; justify-content: center; align-items: center; }
-            .pm-settings-modal { background: var(--pm-bg-sec); border: 1px solid var(--pm-accent); padding: 20px; width: 250px; font-family: 'Consolas', monospace; box-shadow: 0 0 20px rgba(0,188,212,0.2); }
-            .pm-settings-modal h3 { color: var(--pm-accent); margin: 0 0 15px 0; font-size: 14px; text-transform: uppercase; border-bottom: 1px solid var(--pm-border); padding-bottom: 5px; }
-            .pm-setting-row label { display: block; color: var(--pm-text-muted); font-size: 10px; margin-bottom: 5px; }
-            .pm-setting-row select { width: 100%; background: var(--pm-bg); color: var(--pm-text); border: 1px solid var(--pm-border); padding: 5px; font-family: inherit; }
-            .pm-settings-actions { text-align: right; }
-            .pm-btn-save { background: var(--pm-accent); color: #000; border: none; padding: 5px 15px; font-weight: bold; cursor: pointer; }
-            .pm-btn-cancel { background: transparent; color: var(--pm-text-muted); border: 1px solid var(--pm-border); padding: 4px 10px; margin-right: 5px; cursor: pointer; }
-        </style>
+                    .pm-section-content {
+                        padding: 4px 8px;
+                    }
 
-        <div class="pm-toolbar">
-            <button onclick="RED.performanceMonitor.openSettings()">CONFIG</button>
-            <button id="pm-btn-pause" onclick="RED.performanceMonitor.togglePause()">PAUSE</button>
-            <button onclick="RED.performanceMonitor.refresh()">REFRESH</button>
-            <div style="flex:1"></div>
-            <span id="pm-connection-status" style="color:#00bcd4; font-size:9px; align-self:center;">ONLINE</span>
-        </div>
-        <div id="pm-container" class="pm-sidebar"></div>
-        `;
+                    /* Collapsed State Logic */
+                    .pm-section.collapsed .pm-grid-row,
+                    .pm-section.collapsed .pm-info-row,
+                    .pm-section.collapsed .pm-bar-container,
+                    .pm-section.collapsed .pm-spark-box {
+                        display: none !important;
+                    }
+                    
+                    /* Header Value Logic */
+                    .pm-header-value {
+                        font-weight: bold;
+                        color: var(--red-ui-text-color-primary, #333);
+                        margin-left: 8px;
+                        font-size: 11px;
+                        opacity: 0.9;
+                        display: none; /* Hidden by default (Expanded) */
+                    }
+
+                    .pm-section.collapsed .pm-header-value {
+                        display: inline; /* Visible when collapsed */
+                    }
+
+                    .pm-grid-row {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        margin-bottom: 3px;
+                    }
+
+                    .pm-spark-box {
+                        margin-top: 6px;
+                    }
+
+                    .pm-tools {
+                        display: flex;
+                        gap: 8px;
+                        color: var(--red-ui-text-color-secondary, #999);
+                        align-items: center;
+                    }
+                    
+                    .pm-tools i {
+                        cursor: pointer;
+                    }
+                    
+                    .pm-tools i:hover {
+                        color: var(--red-ui-text-color-primary, #666);
+                    }
+
+                    .pm-grid-wide {
+                        display: grid;
+                        grid-template-columns: 1fr 1fr;
+                        gap: var(--pm-gap);
+                        margin-bottom: var(--pm-gap);
+                    }
+
+                    /* Legacy header value rule removal if present */
+
+                    .pm-bar-container {
+                        height: 6px;
+                        background: var(--red-ui-tertiary-background, #e0e0e0);
+                        border-radius: 3px;
+                        overflow: hidden;
+                    }
+
+                    .pm-bar-fill {
+                        height: 100%;
+                        transition: width 0.3s ease;
+                        border-radius: 3px;
+                    }
+
+                    .pm-spark-box {
+                        background: var(--red-ui-primary-background, #fff);
+                        padding: 8px;
+                        border: 1px solid var(--red-ui-secondary-border-color, #ddd);
+                        border-radius: 4px;
+                    }
+
+                    .pm-spark-header {
+                        display: flex;
+                        justify-content: space-between;
+                        margin-bottom: 4px;
+                    }
+
+                    .pm-spark-label {
+                        font-size: calc(var(--pm-font-size) - 3px);
+                        color: var(--red-ui-text-color-secondary, #666);
+                        text-transform: uppercase;
+                    }
+
+                    .pm-toolbar {
+                        display: flex;
+                        border-bottom: 1px solid var(--red-ui-secondary-border-color, #ddd);
+                        background: var(--red-ui-secondary-background, #fafafa);
+                        padding: 6px 10px;
+                        gap: 5px;
+                    }
+
+                    .pm-toolbar button {
+                        background: var(--red-ui-primary-background, #fff);
+                        border: 1px solid var(--red-ui-secondary-border-color, #ccc);
+                        color: var(--red-ui-text-color-secondary, #666);
+                        padding: 4px 10px;
+                        font-family: inherit;
+                        font-size: calc(var(--pm-font-size) - 2px);
+                        cursor: pointer;
+                        border-radius: 3px;
+                        transition: all 0.2s ease;
+                    }
+
+                    .pm-toolbar button:hover {
+                        border-color: var(--red-ui-text-color-link, #0066cc);
+                        color: var(--red-ui-text-color-link, #0066cc);
+                    }
+
+                    .pm-toolbar button.active {
+                        background: var(--red-ui-text-color-link, #0066cc);
+                        color: #fff;
+                        border-color: var(--red-ui-text-color-link, #0066cc);
+                    }
+
+                    /* Settings Modal */
+                    #pm-settings-overlay {
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background: rgba(0,0,0,0.5);
+                        z-index: 9999;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                    }
+
+                    .pm-settings-modal {
+                        background: var(--red-ui-primary-background, #fff);
+                        border: 1px solid var(--red-ui-secondary-border-color, #ccc);
+                        border-radius: 8px;
+                        padding: 20px;
+                        width: 360px;
+                        max-height: 80vh;
+                        overflow-y: auto;
+                        box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+                        font-family: var(--red-ui-primary-font, 'Helvetica Neue', Arial, sans-serif);
+                    }
+
+                    .pm-settings-modal h3 {
+                        color: var(--red-ui-text-color-primary, #333);
+                        margin: 0 0 15px 0;
+                        font-size: 16px;
+                        border-bottom: 1px solid var(--red-ui-secondary-border-color, #ddd);
+                        padding-bottom: 10px;
+                    }
+
+                    .pm-setting-section {
+                        margin-bottom: 20px;
+                    }
+
+                    .pm-setting-section-title {
+                        font-size: 11px;
+                        font-weight: 600;
+                        text-transform: uppercase;
+                        color: var(--red-ui-text-color-link, #0066cc);
+                        margin-bottom: 10px;
+                        letter-spacing: 0.5px;
+                    }
+
+                    .pm-setting-row {
+                        margin-bottom: 10px;
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                    }
+
+                    .pm-setting-row label {
+                        flex: 1;
+                        color: var(--red-ui-text-color-secondary, #666);
+                        font-size: 12px;
+                    }
+
+                    .pm-setting-row select,
+                    .pm-setting-row input[type="number"] {
+                        background: var(--red-ui-secondary-background, #fafafa);
+                        color: var(--red-ui-text-color-primary, #333);
+                        border: 1px solid var(--red-ui-secondary-border-color, #ccc);
+                        padding: 6px 8px;
+                        border-radius: 3px;
+                        font-family: inherit;
+                        font-size: 12px;
+                    }
+
+                    .pm-setting-row input[type="checkbox"] {
+                        margin-right: 8px;
+                    }
+
+                    .pm-theme-preview {
+                        padding: 8px;
+                        background: var(--red-ui-tertiary-background, #f5f5f5);
+                        border-radius: 4px;
+                        margin-top: 8px;
+                    }
+
+                    .pm-theme-preview small {
+                        color: var(--red-ui-text-color-secondary, #666);
+                        font-size: 11px;
+                    }
+
+                    .pm-settings-actions {
+                        margin-top: 20px;
+                        text-align: right;
+                        display: flex;
+                        gap: 10px;
+                        justify-content: flex-end;
+                    }
+
+                    .pm-btn-save {
+                        background: var(--red-ui-text-color-link, #0066cc);
+                        color: #fff;
+                        border: none;
+                        padding: 8px 20px;
+                        font-weight: 500;
+                        cursor: pointer;
+                        border-radius: 4px;
+                    }
+
+                    .pm-btn-save:hover {
+                        opacity: 0.9;
+                    }
+
+                    .pm-btn-cancel {
+                        background: transparent;
+                        color: var(--red-ui-text-color-secondary, #666);
+                        border: 1px solid var(--red-ui-secondary-border-color, #ccc);
+                        padding: 7px 15px;
+                        cursor: pointer;
+                        border-radius: 4px;
+                    }
+
+                    .pm-btn-cancel:hover {
+                        border-color: var(--red-ui-text-color-primary, #333);
+                    }
+
+                    .pm-info-row {
+                        display: flex;
+                        justify-content: space-between;
+                        padding: 4px 0;
+                        border-bottom: 1px dashed var(--red-ui-tertiary-border-color, #eee);
+                    }
+
+                    .pm-info-label {
+                        color: var(--red-ui-text-color-secondary, #666);
+                    }
+                    
+                    .pm-group-header {
+                        padding: 10px 10px 5px 10px;
+                        font-size: 11px;
+                        font-weight: 700;
+                        color: var(--red-ui-text-color-secondary, #666);
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                    }
+                    
+                    .pm-group-container {
+                        margin-bottom: 20px;
+                    }
+                </style>
+
+                <div class="pm-toolbar">
+                    <button onclick="RED.performanceMonitor.openSettings()"><i class="fa fa-cog"></i> Settings</button>
+                    <button id="pm-btn-pause" onclick="RED.performanceMonitor.togglePause()"><i class="fa fa-pause"></i> Pause</button>
+                    <button onclick="RED.performanceMonitor.refresh()"><i class="fa fa-refresh"></i></button>
+                    <div style="flex:1"></div>
+                    <span id="pm-connection-status" style="color: var(--red-ui-text-color-success); font-size: 10px; align-self: center;">● ONLINE</span>
+                </div>
+                <div id="pm-container" class="pm-sidebar">
+                    <div class="pm-group-header" onclick="RED.performanceMonitor.toggleGroup('nr')">
+                        <span><i class="fa fa-caret-down" id="pm-group-icon-nr"></i> Node-RED Application</span>
+                    </div>
+                    <div id="pm-group-nr" class="pm-group-container"></div>
+                    
+                    <div class="pm-group-header" onclick="RED.performanceMonitor.toggleGroup('sys')">
+                        <span><i class="fa fa-caret-down" id="pm-group-icon-sys"></i> System Hardware</span>
+                    </div>
+                    <div id="pm-group-sys" class="pm-group-container"></div>
+                </div>
+            `;
         }
 
-        // Default Section Order
-        let sectionOrder = ['cpu', 'memory', 'disk', 'io', 'process'];
+        // Section order
+        let sectionOrder = ['cpu', 'memory', 'lag', 'system', 'process'];
 
-        // Render Logic
+        // Render sections
         function renderSections(stats) {
-            const container = document.getElementById('pm-container');
-            if (!container) return;
+            const containerNr = document.getElementById('pm-group-nr');
+            const containerSys = document.getElementById('pm-group-sys');
+            if (!containerNr || !containerSys) return;
 
-            sectionOrder.forEach(sectionId => {
-                let sectionEl = document.getElementById(`pm-sec-${sectionId}`);
-                if (!sectionEl) {
-                    sectionEl = createSectionElement(sectionId);
-                    container.appendChild(sectionEl);
-                }
-                updateSectionContent(sectionId, stats);
-            });
+            // Define sections for each group
+            const nrSections = ['app-info', 'app-cpu', 'app-memory', 'app-lag'];
+            const sysSections = ['sys-cpu', 'sys-memory', 'sys-disk', 'sys-info'];
+
+            const renderGroup = (sections, container) => {
+                sections.forEach(sectionId => {
+                    let sectionEl = document.getElementById(`pm-sec-${sectionId}`);
+                    if (!sectionEl) {
+                        sectionEl = createSectionElement(sectionId);
+                        container.appendChild(sectionEl);
+                    }
+                    updateSectionContent(sectionId, stats);
+                });
+            };
+
+            renderGroup(nrSections, containerNr);
+            renderGroup(sysSections, containerSys);
+
+            // Update history
+            history.cpu.push(stats.nodeRed.cpu || 0);
+            history.cpu.shift();
+            history.memory.push(stats.nodeRed.memory.heapUsed / stats.nodeRed.memory.heapTotal * 100);
+            history.memory.shift();
+            history.lag.push(stats.nodeRed.eventLoopLag || 0);
+            history.lag.shift();
+
+            // System history
+            history.sysCpu.push(stats.system.cpu.percent || 0);
+            history.sysCpu.shift();
+            history.sysRam.push(stats.system.memory.usedPercent || 0);
+            history.sysRam.shift();
+
+            // Disk history (optional, usually flat but good for consistency)
+            const diskPct = (stats.system.disk && stats.system.disk.total > 0) ? stats.system.disk.usedPercent : 0;
+            history.sysDisk.push(diskPct);
+            history.sysDisk.shift();
         }
 
         function createSectionElement(id) {
             const el = document.createElement('div');
             el.id = `pm-sec-${id}`;
             el.className = 'pm-section';
-            el.draggable = true;
             el.dataset.id = id;
 
-            // Drag Events
-            el.addEventListener('dragstart', handleDragStart);
-            el.addEventListener('dragover', handleDragOver);
-            el.addEventListener('drop', handleDrop);
-            el.addEventListener('dragend', handleDragEnd);
+            const titles = {
+                'app-info': 'Node-RED Info',
+                'app-cpu': 'CPU Load',
+                'app-memory': 'Memory Usage',
+                'app-lag': 'Event Loop Latency',
+                'sys-cpu': 'CPU Load',
+                'sys-memory': 'RAM Usage',
+                'sys-disk': 'Disk Storage',
+                'sys-info': 'Host Information'
+            };
+
+            const tooltips = {
+                'app-cpu': 'Node-RED Process CPU usage (% of one core).',
+                'app-memory': 'Heap: JS Objects. RSS: Physical RAM.',
+                'app-lag': 'Delay in the event loop processing.',
+                'sys-cpu': 'Total system CPU load (all cores).',
+                'sys-memory': 'System-wide RAM usage.',
+                'sys-disk': 'Root partition disk usage.',
+                'sys-info': 'System platform and uptime details.',
+                'app-info': 'Process ID and Uptime.'
+            };
+
+            const icons = {
+                'app-info': 'fa-cube',
+                'app-cpu': 'fa-microchip',
+                'app-memory': 'fa-memory',
+                'app-lag': 'fa-bolt',
+                'sys-cpu': 'fa-server',
+                'sys-memory': 'fa-th-large',
+                'sys-disk': 'fa-hdd-o',
+                'sys-info': 'fa-desktop'
+            };
 
             el.innerHTML = `
-            <div class="pm-section-header" onclick="RED.performanceMonitor.toggle('${id}')">
-                <span class="pm-title">> ${id.toUpperCase()}</span>
-                <span class="pm-toggle-icon">[-]</span>
-            </div>
-            <div class="pm-content" id="pm-body-${id}"></div>
-        `;
+                <div class="pm-section-header">
+                    <span class="pm-title"><i class="fa ${icons[id]}"></i> ${titles[id] || id.toUpperCase()} <span class="pm-header-value" id="pm-val-${id}"></span></span>
+                    <div class="pm-tools">
+                        <i class="fa fa-chevron-down" id="pm-toggle-${id}" onclick="RED.performanceMonitor.toggle('${id}')"></i>
+                    </div>
+                </div>
+                <div class="pm-content pm-section-content" id="pm-body-${id}"></div>
+            `;
             return el;
         }
 
-        // Drag Handlers
-        let dragSrcEl = null;
-        function handleDragStart(e) { dragSrcEl = this; e.dataTransfer.effectAllowed = 'move'; this.classList.add('dragging'); }
-        function handleDragOver(e) { if (e.preventDefault) e.preventDefault(); e.dataTransfer.dropEffect = 'move'; return false; }
-        function handleDrop(e) {
-            if (e.stopPropagation) e.stopPropagation();
-            if (dragSrcEl !== this) {
-                const container = document.getElementById('pm-container');
-                const sections = [...container.querySelectorAll('.pm-section')];
-                const srcIdx = sections.indexOf(dragSrcEl);
-                const tgtIdx = sections.indexOf(this);
-                srcIdx < tgtIdx ? this.after(dragSrcEl) : this.before(dragSrcEl);
-                sectionOrder = [...container.querySelectorAll('.pm-section')].map(el => el.dataset.id);
-            }
-            return false;
+        function getBarClass(percent) {
+            if (percent < 70) return 'pm-bar-good';
+            if (percent < 90) return 'pm-bar-warn';
+            return 'pm-bar-crit';
         }
-        function handleDragEnd() { this.classList.remove('dragging'); }
 
-        // Update Content
         function updateSectionContent(id, stats) {
             const body = document.getElementById(`pm-body-${id}`);
             if (!body) return;
 
-            // Update history arrays
-            if (id === 'io') {
-                history.read.push(stats.io.disk.read); history.read.shift();
-                history.write.push(stats.io.disk.write); history.write.shift();
-                history.rx.push(stats.io.network.rx_sec); history.rx.shift();
-                history.tx.push(stats.io.network.tx_sec); history.tx.shift();
-            }
-
             let html = '';
 
-            if (id === 'cpu') {
+            const valEl = document.getElementById(`pm-val-${id}`);
+
+            if (id === 'app-cpu') {
+                const cpuPercent = stats.nodeRed.cpu || 0;
+                if (valEl) valEl.textContent = `${cpuPercent.toFixed(1)}%`;
+
                 html = `
-                ${progressBar('Total Load', stats.system.cpu, stats.system.cpu + '%')}
-                ${progressBar('NR Contrib', stats.nodeRed.cpu, stats.nodeRed.cpu.toFixed(1) + '%', 100)}
-                <div style="text-align:right; font-size:9px; color:#666; margin-top:4px">Core Count: ${stats.system.cpu.cores || 1}</div>
-            `;
+                    <div class="pm-grid-row">
+                        <span>Process Load</span>
+                        <div class="pm-bar-container">
+                            <div class="pm-bar-fill ${getBarClass(cpuPercent)}" style="width:${Math.min(cpuPercent, 100)}%"></div>
+                        </div>
+                        <span class="pm-value ${getStatusClass(cpuPercent)}">${cpuPercent.toFixed(1)}%</span>
+                    </div>
+                    <div class="pm-spark-box" style="margin-top: 8px;">
+                        ${generateSparkline(history.cpu, 200, 30, '--red-ui-text-color-link')}
+                    </div>
+                `;
             }
-            else if (id === 'memory') {
+            else if (id === 'app-memory') {
+                const heapPct = (stats.nodeRed.memory.heapUsed / stats.nodeRed.memory.heapTotal) * 100;
+                const usedMB = formatBytes(stats.nodeRed.memory.heapUsed);
+                if (valEl) valEl.textContent = usedMB;
+
                 html = `
-                ${progressBar('System RAM', stats.system.memory.usedPercent, formatBytes(stats.system.memory.used))}
-                <div class="pm-grid-row">
-                    <span>NR HEAP</span>
-                    <div class="pm-bar-container"><div class="pm-bar-fill ${getStatusClass((stats.nodeRed.memory.heapUsed / stats.nodeRed.memory.heapTotal * 100))}" style="width:${(stats.nodeRed.memory.heapUsed / stats.nodeRed.memory.heapTotal * 100)}%"></div></div>
-                    <span class="pm-value" style="text-align:right">${formatBytes(stats.nodeRed.memory.heapUsed)}</span>
-                </div>
-                <div style="display:flex; justify-content:space-between; color:#666; padding-top:4px">
-                    <span>Avail: ${formatBytes(stats.system.memory.available)}</span>
-                    <span>Total: ${formatBytes(stats.system.memory.total)}</span>
-                </div>
-            `;
+                    <div class="pm-grid-row">
+                        <span>Heap (Used/Total)</span>
+                        <div class="pm-bar-container">
+                            <div class="pm-bar-fill ${getBarClass(heapPct)}" style="width:${heapPct}%"></div>
+                        </div>
+                        <span class="pm-value">${usedMB} / ${formatBytes(stats.nodeRed.memory.heapTotal)}</span>
+                    </div>
+                    <div class="pm-grid-row">
+                        <span>RSS (Resident)</span>
+                        <span class="pm-value">${formatBytes(stats.nodeRed.memory.rss)}</span>
+                    </div>
+                    <div class="pm-spark-box" style="margin-top: 8px;">
+                        ${generateSparkline(history.memory, 200, 30, '--red-ui-text-color-warning')}
+                    </div>
+                `;
             }
-            else if (id === 'disk') {
-                html = progressBar(stats.system.disk.mount, stats.system.disk.usedPercent, formatBytes(stats.system.disk.used));
-                html += `<div style="text-align:right; color:#666">Size: ${formatBytes(stats.system.disk.total)}</div>`;
-            }
-            else if (id === 'io') {
+            else if (id === 'app-lag') {
+                const lag = stats.nodeRed.eventLoopLag || 0;
+                if (valEl) valEl.textContent = `${lag.toFixed(2)} ms`;
+                const lagPercent = Math.min((lag / 100) * 100, 100);
+
                 html = `
-                <div class="pm-grid-wide">
-                    <div class="pm-spark-box">
-                        <div class="pm-spark-header"><span class="pm-spark-label">DISK READ</span><span class="pm-value">${stats.io.disk.read}</span></div>
-                        ${generateSparkline(history.read, 80, 20, '#4caf50')}
+                    <div class="pm-grid-row">
+                        <span>Current Lag</span>
+                        <div class="pm-bar-container">
+                            <div class="pm-bar-fill ${getBarClass(lagPercent)}" style="width:${lagPercent}%"></div>
+                        </div>
+                        <span class="pm-value ${getLagStatusClass(lag)}">${lag.toFixed(2)} ms</span>
                     </div>
-                    <div class="pm-spark-box">
-                        <div class="pm-spark-header"><span class="pm-spark-label">DISK WRITE</span><span class="pm-value">${stats.io.disk.write}</span></div>
-                        ${generateSparkline(history.write, 80, 20, '#ff9800')}
+                    <div class="pm-spark-box" style="margin-top: 8px;">
+                        ${generateSparkline(history.lag, 200, 30, '--red-ui-text-color-error')}
                     </div>
-                </div>
-                <div class="pm-grid-wide">
-                    <div class="pm-spark-box">
-                        <div class="pm-spark-header"><span class="pm-spark-label">NET DOWN</span><span class="pm-value">${formatBytes(stats.io.network.rx_sec)}/s</span></div>
-                        ${generateSparkline(history.rx, 80, 20, '#00bcd4')}
-                    </div>
-                    <div class="pm-spark-box">
-                        <div class="pm-spark-header"><span class="pm-spark-label">NET UP</span><span class="pm-value">${formatBytes(stats.io.network.tx_sec)}/s</span></div>
-                        ${generateSparkline(history.tx, 80, 20, '#9c27b0')}
-                    </div>
-                </div>
-            `;
+                `;
             }
-            else if (id === 'process') {
+            else if (id === 'sys-cpu') {
+                const sysCpu = stats.system.cpu.percent || 0;
+                if (valEl) valEl.textContent = `${sysCpu.toFixed(1)}%`;
+
                 html = `
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px; font-size:10px">
-                    <div><span style="color:#666">PID:</span> <span class="pm-value">${stats.nodeRed.pid}</span></div>
-                    <div style="text-align:right"><span style="color:#666">UPTIME:</span> <span class="pm-value">${formatUptime(stats.nodeRed.uptime)}</span></div>
-                </div>
-            `;
+                    <div class="pm-grid-row">
+                        <span>Total Load</span>
+                        <div class="pm-bar-container">
+                            <div class="pm-bar-fill ${getBarClass(sysCpu)}" style="width:${Math.min(sysCpu, 100)}%"></div>
+                        </div>
+                        <span class="pm-value ${getStatusClass(sysCpu)}">${sysCpu.toFixed(1)}%</span>
+                    </div>
+                    <div style="margin-top: 8px; font-size: 10px; color: var(--red-ui-text-color-secondary);">
+                        ${stats.system.cpu.cores} Cores | ${stats.system.cpu.model.split('@')[0]}
+                    </div>
+                    <div class="pm-spark-box" style="margin-top: 8px;">
+                        ${generateSparkline(history.sysCpu, 200, 30, '--red-ui-text-color-link')}
+                    </div>
+                `;
+            }
+            else if (id === 'sys-memory') {
+                const sysPct = stats.system.memory.usedPercent;
+                if (valEl) valEl.textContent = `${sysPct.toFixed(1)}%`;
+
+                html = `
+                    <div class="pm-grid-row">
+                        <span>Used RAM</span>
+                        <div class="pm-bar-container">
+                            <div class="pm-bar-fill ${getBarClass(sysPct)}" style="width:${sysPct}%"></div>
+                        </div>
+                        <span class="pm-value">${sysPct.toFixed(1)}%</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px;">
+                        <span style="color: var(--red-ui-text-color-secondary);">Total: <span class="pm-value">${formatBytes(stats.system.memory.total)}</span></span>
+                        <span style="color: var(--red-ui-text-color-secondary);">Free: <span class="pm-value">${formatBytes(stats.system.memory.free)}</span></span>
+                    </div>
+                    <div class="pm-spark-box" style="margin-top: 8px;">
+                        ${generateSparkline(history.sysRam, 200, 30, '--red-ui-text-color-warning')}
+                    </div>
+                `;
+            }
+            else if (id === 'sys-disk') {
+                if (stats.system.disk && stats.system.disk.total > 0) {
+                    const diskUsed = stats.system.disk.total - stats.system.disk.free;
+                    const diskPct = stats.system.disk.usedPercent || 0;
+                    if (valEl) valEl.textContent = `${diskPct}%`;
+
+                    html = `
+                        <div class="pm-grid-row">
+                            <span>Root (${stats.system.disk.mount})</span>
+                            <div class="pm-bar-container">
+                                <div class="pm-bar-fill ${getBarClass(diskPct)}" style="width:${diskPct}%"></div>
+                            </div>
+                            <span class="pm-value">${diskPct}%</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px;">
+                            <span style="color: var(--red-ui-text-color-secondary);">Used: <span class="pm-value">${formatBytes(diskUsed)}</span></span>
+                            <span style="color: var(--red-ui-text-color-secondary);">Free: <span class="pm-value">${formatBytes(stats.system.disk.free)}</span></span>
+                        </div>
+                        <div class="pm-spark-box" style="margin-top: 8px;">
+                            ${generateSparkline(history.sysDisk, 200, 30, '--red-ui-text-color-success')}
+                        </div>
+                    `;
+                } else {
+                    html = '<div style="color:var(--red-ui-text-color-secondary); font-style:italic;">Disk info unavailable</div>';
+                    if (valEl) valEl.textContent = 'N/A';
+                }
+            }
+            else if (id === 'sys-info') {
+                html = `
+                    <div class="pm-info-row">
+                        <span class="pm-info-label">Platform</span>
+                        <span class="pm-value">${stats.system.platform} (${stats.system.arch})</span>
+                    </div>
+                    <div class="pm-info-row">
+                        <span class="pm-info-label">Node.js</span>
+                        <span class="pm-value">${stats.system.nodeVersion}</span>
+                    </div>
+                    <div class="pm-info-row">
+                        <span class="pm-info-label">Uptime</span>
+                        <span class="pm-value">${formatUptime(stats.system.uptime)}</span>
+                    </div>
+                `;
+            }
+            else if (id === 'app-info') {
+                html = `
+                    <div class="pm-info-row">
+                        <span class="pm-info-label">PID</span>
+                        <span class="pm-value">${stats.nodeRed.pid}</span>
+                    </div>
+                    <div class="pm-info-row">
+                        <span class="pm-info-label">Uptime</span>
+                        <span class="pm-value">${formatUptime(stats.nodeRed.uptime)}</span>
+                    </div>
+                    <div class="pm-info-row">
+                        <span class="pm-info-label">External Memory</span>
+                        <span class="pm-value">${formatBytes(stats.nodeRed.memory.external)}</span>
+                    </div>
+                    <div class="pm-info-row">
+                        <span class="pm-info-label">Array Buffers</span>
+                        <span class="pm-value">${formatBytes(stats.nodeRed.memory.arrayBuffers)}</span>
+                    </div>
+                `;
             }
 
             body.innerHTML = html;
-        }
-
-        function progressBar(label, percent, valueText, max = 100) {
-            const p = Math.min((percent / max) * 100, 100);
-            return `
-            <div class="pm-grid-row">
-                <span>${label}</span>
-                <div class="pm-bar-container">
-                    <div class="pm-bar-fill ${getStatusClass(p)}" style="width:${p}%"></div>
-                </div>
-                <span class="pm-value" style="text-align:right">${valueText}</span>
-            </div>
-        `;
         }
 
         // API Handling
@@ -483,80 +1269,127 @@
             try {
                 const res = await fetch('performance-monitor/stats');
                 const data = await res.json();
-                if (data.error) return;
+                if (data.error) {
+                    throw new Error(data.error);
+                }
                 renderSections(data);
-                updateHeaderWidget(data); // V4 Update
+                updateHeaderWidget(data);
+
+                const statusEl = document.getElementById('pm-connection-status');
+                if (statusEl) {
+                    statusEl.textContent = '● ONLINE';
+                    statusEl.style.color = 'var(--red-ui-text-color-success)';
+                }
             } catch (e) {
-                document.getElementById('pm-connection-status').textContent = "OFFLINE";
-                document.getElementById('pm-connection-status').style.color = "#f44336";
+                const statusEl = document.getElementById('pm-connection-status');
+                if (statusEl) {
+                    statusEl.textContent = '● OFFLINE';
+                    statusEl.style.color = 'var(--red-ui-text-color-error)';
+                }
             }
         }
 
-        // Init Logic
+        // Load settings from server
         async function loadSettings() {
             try {
                 const res = await fetch('performance-monitor/settings');
                 const data = await res.json();
-                // Merge defaults
                 settings = { ...settings, ...data };
-                applyTheme(settings.theme || 'auto');
+                applyCustomStyles();
+                applyHudTheme();
+                toggleHudVisibility();
                 restartTimer();
-            } catch (e) { }
+            } catch (e) {
+                console.warn('Performance Monitor: Could not load settings', e);
+            }
         }
 
         function restartTimer() {
             if (pollTimer) clearInterval(pollTimer);
             pollTimer = setInterval(fetchStats, settings.refreshInterval);
+            fetchStats();
         }
 
-        // Initialization object
+        // Public API
         RED.performanceMonitor = {
-            toggle: (id) => document.getElementById(`pm-sec-${id}`).classList.toggle('collapsed'),
+            toggle: (id) => {
+                const section = document.getElementById(`pm-sec-${id}`);
+                if (section) {
+                    section.classList.toggle('collapsed');
+                    const icon = document.getElementById(`pm-toggle-${id}`);
+                    if (icon) {
+                        icon.classList.toggle('fa-chevron-down');
+                        icon.classList.toggle('fa-chevron-right');
+                    }
+                }
+            },
+            toggleGroup: (id) => {
+                const group = document.getElementById(`pm-group-${id}`);
+                const icon = document.getElementById(`pm-group-icon-${id}`);
+                if (group) {
+                    group.classList.toggle('collapsed');
+                    if (icon) {
+                        icon.classList.toggle('fa-caret-down');
+                        icon.classList.toggle('fa-caret-right');
+                    }
+                }
+            },
             openSettings: showSettingsPanel,
             closeSettings: () => document.getElementById('pm-settings-overlay')?.remove(),
             saveSettings: async () => {
-                const interval = document.getElementById('pm-setting-interval').value;
-                const theme = document.getElementById('pm-setting-theme').value;
+                const newSettings = {
+                    refreshInterval: parseInt(document.getElementById('pm-setting-interval').value) || 2000,
+                    paneFontSize: parseInt(document.getElementById('pm-setting-fontSize').value) || 12,
+                    paneFontFamily: document.getElementById('pm-setting-fontFamily').value || 'Helvetica Neue',
+                    hudSize: document.getElementById('pm-setting-hudWidgetSize').value || 'Normal',
+                    hudTheme: document.getElementById('pm-setting-hudTheme').value || 'classic',
+                    hideHud: document.getElementById('pm-setting-hideHud').checked
+                };
 
                 await fetch('performance-monitor/settings', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ refreshInterval: interval, theme: theme })
+                    body: JSON.stringify(newSettings)
                 });
 
-                settings.refreshInterval = interval;
-                settings.theme = theme;
-
-                applyTheme(theme);
+                Object.assign(settings, newSettings);
+                applyCustomStyles();
+                applyHudTheme();
+                applyHudSize();
+                toggleHudVisibility();
                 restartTimer();
                 RED.performanceMonitor.closeSettings();
             },
             togglePause: () => {
                 isPaused = !isPaused;
                 const btn = document.getElementById('pm-btn-pause');
-                btn.textContent = isPaused ? "RESUME" : "PAUSE";
-                btn.classList.toggle('active');
+                if (btn) {
+                    btn.innerHTML = isPaused ? '<i class="fa fa-play"></i> Resume' : '<i class="fa fa-pause"></i> Pause';
+                    btn.classList.toggle('active');
+                }
             },
-            resetBaseline: () => {
-                sessionRec.peakRam = 0; // Reset Peak
-                // Force refetch
+            resetPeak: () => {
+                sessionRec.peakRam = 0;
+                sessionRec.historyRam = [];
                 fetchStats();
             },
             refresh: fetchStats
         };
 
+        // Register sidebar tab
         RED.sidebar.addTab({
             id: 'performance-monitor',
-            label: 'perf', // Keep label short
-            name: 'Tech HUD Monitor',
-            iconClass: 'fa fa-terminal', // Changed icon to match theme
+            label: 'perf',
+            name: 'Performance Monitor',
+            iconClass: 'fa fa-tachometer',
             content: buildSidebarContent(),
             enableOnEdit: true
         });
 
-        // V4: Inject Header Widget on Init
+        // Inject header widget
         injectHeaderWidget();
 
+        // Initialize
         loadSettings();
         restartTimer();
     })();

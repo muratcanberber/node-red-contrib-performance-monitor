@@ -1,34 +1,237 @@
 /**
- * Node-RED Performance Monitor Plugin
- * Backend: Collects system metrics and exposes API endpoint
+ * Node-RED Performance Monitor Plugin v1.1.0
+ * Backend: Collects system metrics using native Node.js APIs
+ * Zero native dependencies - works on Alpine, Windows, and Raspberry Pi
  */
 
-const si = require('systeminformation');
+const os = require('os');
+const path = require('path');
+const fs = require('fs');
+const { exec } = require('child_process');
+const util = require('util');
+const execAsync = util.promisify(exec);
 
 module.exports = function (RED) {
-    // Cache for metrics to avoid excessive system calls
+    // Configuration settings
     let settings = {
-        refreshInterval: 2000
+        refreshInterval: 2000,
+        paneFontSize: 12,
+        paneFontFamily: 'Helvetica Neue',
+        hudSize: 'Normal',
+        hudTheme: 'classic',
+        hideHud: false
     };
 
+    // CPU Usage Tracking (diff-based)
+    let lastCpuUsage = process.cpuUsage();
+    let lastCpuTime = process.hrtime.bigint();
+    let lastCpuTimes = null;
+
+    // Event Loop Lag Tracking
+    let eventLoopLag = 0;
+    let lagMeasureTimer = null;
+
+    // Metrics cache
     let metricsCache = {
         data: null,
         timestamp: 0
     };
 
-    // Helper to calculate CPU percentage for a single PID
-    // Returns promise resolving to percent number
-    async function getPidCpu(pid) {
-        try {
-            const stats = await si.procStats();
-            // This is a simplification. For accurate per-process CPU over time, 
-            // we'd need to diff cpu time between intervals.
-            // fallback to si.processes() which includes %cpu
-            return null;
-        } catch (e) { return 0; }
+    /**
+     * Calculate CPU usage percentage using diff-based process.cpuUsage()
+     * @returns {number} CPU percentage (0-100)
+     */
+    function getCpuPercent() {
+        const currentCpuUsage = process.cpuUsage(lastCpuUsage);
+        const currentTime = process.hrtime.bigint();
+
+        // Calculate elapsed time in milliseconds
+        const elapsedMs = Number(currentTime - lastCpuTime) / 1e6;
+
+        if (elapsedMs <= 0) {
+            return 0;
+        }
+
+        // CPU usage is in microseconds, convert to percentage
+        // (user + system) microseconds / (elapsed time in microseconds) * 100
+        const totalCpuMicros = currentCpuUsage.user + currentCpuUsage.system;
+        const cpuPercent = (totalCpuMicros / 1000) / elapsedMs * 100;
+
+        // Update baseline for next calculation
+        lastCpuUsage = process.cpuUsage();
+        lastCpuTime = process.hrtime.bigint();
+
+        // Clamp to 0-100 range
+        return Math.min(Math.max(cpuPercent, 0), 100);
     }
 
-    // Function to collect all system metrics
+    /**
+     * Measure event loop lag using setImmediate
+     */
+    function measureEventLoopLag() {
+        const start = process.hrtime.bigint();
+        setImmediate(() => {
+            const elapsed = process.hrtime.bigint() - start;
+            eventLoopLag = Number(elapsed) / 1e6; // Convert to milliseconds
+        });
+    }
+
+    /**
+     * Start event loop lag measurement interval
+     */
+    function startLagMeasurement() {
+        if (lagMeasureTimer) {
+            clearInterval(lagMeasureTimer);
+        }
+        lagMeasureTimer = setInterval(measureEventLoopLag, 1000);
+        measureEventLoopLag(); // Initial measurement
+    }
+
+    /**
+     * Get system memory info using platform-specific methods for accuracy
+     * @returns {Promise<Object>} System memory information
+     */
+    async function getSystemMemory() {
+        const totalMem = os.totalmem();
+        let freeMem = os.freemem(); // Default fallback
+        let availableMem = freeMem;
+
+        try {
+            if (process.platform === 'linux') {
+                try {
+                    const info = fs.readFileSync('/proc/meminfo', 'utf8');
+                    const match = info.match(/MemAvailable:\s+(\d+)\s+kB/);
+                    if (match) {
+                        availableMem = parseInt(match[1], 10) * 1024;
+                        freeMem = availableMem;
+                    }
+                } catch (e) { /* ignore */ }
+            }
+            else if (process.platform === 'darwin') {
+                try {
+                    const { stdout } = await execAsync('vm_stat');
+                    const pageSizeMatch = stdout.match(/page size of (\d+) bytes/);
+                    const pageSize = pageSizeMatch ? parseInt(pageSizeMatch[1], 10) : 4096;
+
+                    const freePages = parseInt((stdout.match(/Pages free:\s+(\d+)\./) || [0, 0])[1], 10);
+                    const inactivePages = parseInt((stdout.match(/Pages inactive:\s+(\d+)\./) || [0, 0])[1], 10);
+                    const speculativePages = parseInt((stdout.match(/Pages speculative:\s+(\d+)\./) || [0, 0])[1], 10);
+
+                    availableMem = (freePages + inactivePages + speculativePages) * pageSize;
+                    freeMem = availableMem;
+                } catch (e) { /* ignore */ }
+            }
+        } catch (error) {
+            // retain fallback
+        }
+
+        const usedMem = Math.max(0, totalMem - freeMem);
+
+        return {
+            total: totalMem,
+            used: usedMem,
+            free: freeMem,
+            available: freeMem,
+            usedPercent: Math.round((usedMem / totalMem) * 1000) / 10
+        };
+    }
+
+    /**
+     * Get disk usage (cross-platform, graceful fallback)
+     * @returns {Promise<Object>} Disk information
+     */
+    async function getDiskUsage() {
+        const defaultDisk = {
+            mount: '/',
+            total: 0,
+            used: 0,
+            available: 0,
+            usedPercent: 0
+        };
+
+        // Check if fs.statfs is available (Node.js 18.15+)
+        if (typeof fs.statfs !== 'function') {
+            return defaultDisk;
+        }
+
+        return new Promise((resolve) => {
+            const mountPoint = os.platform() === 'win32' ? 'C:\\' : '/';
+
+            fs.statfs(mountPoint, (err, stats) => {
+                if (err || !stats) {
+                    resolve(defaultDisk);
+                    return;
+                }
+
+                const total = stats.blocks * stats.bsize;
+                const free = stats.bfree * stats.bsize;
+                const available = stats.bavail * stats.bsize;
+                const used = total - free;
+
+                resolve({
+                    mount: mountPoint,
+                    total: total,
+                    used: used,
+                    free: available,
+                    available: available,
+                    usedPercent: total > 0 ? Math.round((used / total) * 1000) / 10 : 0
+                });
+            });
+        });
+    }
+
+    /**
+     * Get CPU information
+     * @returns {Object} CPU info
+     */
+    function getCpuInfo() {
+        const cpus = os.cpus();
+        return {
+            cores: cpus.length,
+            model: cpus.length > 0 ? cpus[0].model : 'Unknown',
+            speed: cpus.length > 0 ? cpus[0].speed : 0
+        };
+    }
+
+    /**
+     * Get System CPU usage (cross-platform diff-based)
+     * @returns {number} System CPU percentage (0-100)
+     */
+    function getSystemCpuUsage() {
+        const cpus = os.cpus();
+        let totalIdle = 0;
+        let totalTick = 0;
+
+        cpus.forEach(cpu => {
+            for (const type in cpu.times) {
+                totalTick += cpu.times[type];
+            }
+            totalIdle += cpu.times.idle;
+        });
+
+        let percentage = 0;
+
+        if (lastCpuTimes) {
+            const idleDifference = totalIdle - lastCpuTimes.idle;
+            const totalDifference = totalTick - lastCpuTimes.total;
+
+            if (totalDifference > 0) {
+                percentage = 100 - (100 * idleDifference / totalDifference);
+            }
+        }
+
+        lastCpuTimes = {
+            idle: totalIdle,
+            total: totalTick
+        };
+
+        return Math.max(0, Math.min(percentage, 100)); // Clamp 0-100
+    }
+
+    /**
+     * Collect all metrics
+     * @returns {Promise<Object>} All performance metrics
+     */
     async function collectMetrics() {
         const now = Date.now();
 
@@ -38,85 +241,56 @@ module.exports = function (RED) {
         }
 
         try {
-            // Collect all metrics in parallel
-            const [
-                cpuLoad,
-                mem,
-                fsSize,
-                diskIO,
-                networkStats,
-                currentProcesses
-            ] = await Promise.all([
-                si.currentLoad(),
-                si.mem(),
-                si.fsSize(),
-                si.disksIO(),
-                si.networkStats(),
-                si.processes()
-            ]);
+            // Get process memory usage (native Node.js API)
+            const memoryUsage = process.memoryUsage();
 
-            // Find Node-RED process info
-            // Looking for process that matches current PID
-            const myPid = process.pid;
-            const nodeRedProcess = currentProcesses.list.find(p => p.pid === myPid) || {};
+            // Get system memory
+            const systemMemory = await getSystemMemory();
 
-            // Calculate primary disk usage
-            const primaryDisk = fsSize.find(fs => fs.mount === '/') || fsSize[0] || {};
+            // Get System CPU
 
-            // Calculate network totals
-            const networkTotals = networkStats.reduce((acc, net) => {
-                acc.rx_bytes += net.rx_bytes || 0;
-                acc.tx_bytes += net.tx_bytes || 0;
-                acc.rx_sec += net.rx_sec || 0;
-                acc.tx_sec += net.tx_sec || 0;
-                return acc;
-            }, { rx_bytes: 0, tx_bytes: 0, rx_sec: 0, tx_sec: 0 });
 
-            // Node-RED Memory Usage
-            const memoryUsage = process.memoryUsage(); // Robust Node.js API
+            // Get CPU percentage (diff-based)
+            const cpuPercent = getCpuPercent();
+
+            // Get CPU info
+            const cpuInfo = getCpuInfo();
+
+            // Get disk usage
+            const diskUsage = await getDiskUsage();
+
+            // Get System CPU
+            const systemCpuPercent = getSystemCpuUsage();
 
             const metrics = {
                 timestamp: now,
                 system: {
-                    cpu: Math.round(cpuLoad.currentLoad * 10) / 10,
-                    memory: {
-                        total: mem.total,
-                        used: mem.used,
-                        free: mem.free,
-                        available: mem.available,
-                        usedPercent: Math.round((mem.used / mem.total) * 1000) / 10
+                    platform: os.platform(),
+                    arch: os.arch(),
+                    nodeVersion: process.version,
+                    cpu: {
+                        percent: Math.round(systemCpuPercent * 10) / 10,
+                        cores: cpuInfo.cores,
+                        model: cpuInfo.model,
+                        speed: cpuInfo.speed
                     },
-                    disk: {
-                        mount: primaryDisk.mount || '/',
-                        total: primaryDisk.size || 0,
-                        used: primaryDisk.used || 0,
-                        available: primaryDisk.available || 0,
-                        usedPercent: primaryDisk.use || 0
-                    }
+                    memory: systemMemory,
+                    disk: diskUsage,
+                    uptime: os.uptime()
                 },
                 nodeRed: {
-                    pid: myPid,
+                    pid: process.pid,
                     uptime: process.uptime(),
-                    cpu: nodeRedProcess.cpu || 0, // % of one core
+                    cpu: Math.round(cpuPercent * 10) / 10,
                     memory: {
                         rss: memoryUsage.rss,
                         heapTotal: memoryUsage.heapTotal,
                         heapUsed: memoryUsage.heapUsed,
                         external: memoryUsage.external,
-                        percentOfSystem: (memoryUsage.rss / mem.total) * 100 // % of total system RAM
-                    }
-                },
-                io: {
-                    disk: {
-                        read: diskIO ? diskIO.rIO_sec || 0 : 0,
-                        write: diskIO ? diskIO.wIO_sec || 0 : 0
+                        arrayBuffers: memoryUsage.arrayBuffers || 0,
+                        percentOfSystem: (memoryUsage.rss / systemMemory.total) * 100
                     },
-                    network: {
-                        rx_sec: Math.round(networkTotals.rx_sec),
-                        tx_sec: Math.round(networkTotals.tx_sec),
-                        rx_total: networkTotals.rx_bytes,
-                        tx_total: networkTotals.tx_bytes
-                    }
+                    eventLoopLag: Math.round(eventLoopLag * 100) / 100
                 }
             };
 
@@ -138,9 +312,12 @@ module.exports = function (RED) {
         type: 'sidebar',
 
         onadd: function () {
-            RED.log.info('Performance Monitor plugin loaded (V2)');
+            RED.log.info('Performance Monitor plugin loaded (v1.1.0 - Precision & UI Update)');
 
-            // API: Stats
+            // Start event loop lag measurement
+            startLagMeasurement();
+
+            // API: Get Stats
             RED.httpAdmin.get('/performance-monitor/stats', async function (req, res) {
                 try {
                     const metrics = await collectMetrics();
@@ -157,15 +334,28 @@ module.exports = function (RED) {
 
             // API: Set Settings
             RED.httpAdmin.post('/performance-monitor/settings', function (req, res) {
-                if (req.body.refreshInterval) {
-                    settings.refreshInterval = parseInt(req.body.refreshInterval);
+                if (req.body.refreshInterval !== undefined) {
+                    settings.refreshInterval = parseInt(req.body.refreshInterval) || 2000;
+                }
+                if (req.body.paneFontSize !== undefined) {
+                    settings.paneFontSize = parseInt(req.body.paneFontSize) || 12;
+                }
+                if (req.body.paneFontFamily !== undefined) {
+                    settings.paneFontFamily = req.body.paneFontFamily || 'Helvetica Neue';
+                }
+                if (req.body.hudSize !== undefined) {
+                    settings.hudSize = req.body.hudSize || 'Normal';
+                }
+                if (req.body.hudTheme !== undefined) {
+                    settings.hudTheme = req.body.hudTheme || 'classic';
+                }
+                if (req.body.hideHud !== undefined) {
+                    settings.hideHud = !!req.body.hideHud;
                 }
                 res.json(settings);
             });
 
             // Serve the sidebar HTML
-            const path = require('path');
-            const fs = require('fs');
             const sidebarHtml = fs.readFileSync(
                 path.join(__dirname, 'performance-monitor.html'),
                 'utf8'
@@ -176,4 +366,22 @@ module.exports = function (RED) {
             });
         }
     });
+
+    // Export for testing
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports._internal = {
+            getCpuPercent,
+            measureEventLoopLag,
+            getSystemMemory,
+            getDiskUsage,
+            getCpuInfo,
+            collectMetrics,
+            getEventLoopLag: () => eventLoopLag,
+            setEventLoopLag: (val) => { eventLoopLag = val; },
+            resetCpuBaseline: () => {
+                lastCpuUsage = process.cpuUsage();
+                lastCpuTime = process.hrtime.bigint();
+            }
+        };
+    }
 };
