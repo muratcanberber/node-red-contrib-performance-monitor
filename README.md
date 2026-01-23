@@ -1,6 +1,6 @@
 # Node-RED Performance Monitor
 
-![Performance Monitor Hero](/Users/muratcanberber/Dev/Project/node-red-contrib-performance-monitor/main.png)
+![Performance Monitor Hero](main.png)
 
 A powerful, native **Performance Monitor** sidebar for Node-RED. It provides real-time visibility into your Node-RED instance's health and system resources with a beautiful, integrated design.
 
@@ -25,11 +25,11 @@ The sidebar is designed for efficiency.
 
 #### Expanded Mode
 Detailed view with progress bars, precise values, and history charts.
-![Extended View](/Users/muratcanberber/Dev/Project/node-red-contrib-performance-monitor/pm_sidebar_extended.png)
+![Extended View](pm_sidebar_extended.png)
 
 #### Mini Mode
 Collapse any section to save space. The **Live Value** stays visible in the header, and the **Chart** remains active.
-![Collapsed View](/Users/muratcanberber/Dev/Project/node-red-contrib-performance-monitor/pm_sidebar_closed.png)
+![Collapsed View](pm_sidebar_closed.png)
 
 ---
 
@@ -39,12 +39,12 @@ Includes 4 stunning themes that layer on top of your Node-RED colors.
 
 | **Classic** | **Funky** |
 | :---: | :---: |
-| ![Classic](/Users/muratcanberber/Dev/Project/node-red-contrib-performance-monitor/pm_theme_classic.png) | ![Funky](/Users/muratcanberber/Dev/Project/node-red-contrib-performance-monitor/pm_theme_funky.png) |
+| ![Classic](pm_theme_classic.png) | ![Funky](pm_theme_funky.png) |
 | *Seamless Integration* | *Vibrant & Playful* |
 
 | **Matrix** | **Cyberpunk** |
 | :---: | :---: |
-| ![Matrix](/Users/muratcanberber/Dev/Project/node-red-contrib-performance-monitor/pm_theme_matrix.png) | ![Cyberpunk](/Users/muratcanberber/Dev/Project/node-red-contrib-performance-monitor/pm_theme_cyberpunk.png) |
+| ![Matrix](pm_theme_matrix.png) | ![Cyberpunk](pm_theme_cyberpunk.png) |
 | *Terminal Code Esthetic* | *Neon Future Style* |
 
 ---
