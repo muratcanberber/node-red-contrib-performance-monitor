@@ -97,7 +97,7 @@ module.exports = function (RED) {
         let availableMem = freeMem;
 
         try {
-            if (process.platform === 'linux') {
+            if (os.platform() === 'linux') {
                 try {
                     const info = fs.readFileSync('/proc/meminfo', 'utf8');
                     const match = info.match(/MemAvailable:\s+(\d+)\s+kB/);
@@ -107,7 +107,7 @@ module.exports = function (RED) {
                     }
                 } catch (e) { /* ignore */ }
             }
-            else if (process.platform === 'darwin') {
+            else if (os.platform() === 'darwin') {
                 try {
                     const { stdout } = await execAsync('vm_stat');
                     const pageSizeMatch = stdout.match(/page size of (\d+) bytes/);
@@ -378,6 +378,9 @@ module.exports = function (RED) {
             collectMetrics,
             getEventLoopLag: () => eventLoopLag,
             setEventLoopLag: (val) => { eventLoopLag = val; },
+            stopLagMeasurement: () => {
+                if (lagMeasureTimer) clearInterval(lagMeasureTimer);
+            },
             resetCpuBaseline: () => {
                 lastCpuUsage = process.cpuUsage();
                 lastCpuTime = process.hrtime.bigint();

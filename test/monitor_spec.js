@@ -60,6 +60,9 @@ describe('Performance Monitor', function () {
     });
 
     afterEach(function () {
+        if (monitorModule && monitorModule._internal && monitorModule._internal.stopLagMeasurement) {
+            monitorModule._internal.stopLagMeasurement();
+        }
         sandbox.restore();
         // Restore original process functions
         process.cpuUsage = originalCpuUsage;
@@ -241,13 +244,13 @@ describe('Performance Monitor', function () {
     });
 
     describe('Memory Metrics', function () {
-        it('should return system memory info', function () {
+        it('should return system memory info', async function () {
             if (!internalFunctions || !internalFunctions.getSystemMemory) {
                 this.skip();
                 return;
             }
 
-            const memInfo = internalFunctions.getSystemMemory();
+            const memInfo = await internalFunctions.getSystemMemory();
 
             assert(typeof memInfo.total === 'number');
             assert(typeof memInfo.used === 'number');
@@ -260,7 +263,8 @@ describe('Performance Monitor', function () {
             assert(memInfo.usedPercent <= 100);
         });
 
-        it('should handle os.totalmem and os.freemem', function () {
+        it('should handle os.totalmem and os.freemem', async function () {
+            sandbox.stub(os, 'platform').returns('unknown'); // Force fallback
             sandbox.stub(os, 'totalmem').returns(16 * 1024 * 1024 * 1024); // 16GB
             sandbox.stub(os, 'freemem').returns(8 * 1024 * 1024 * 1024);  // 8GB free
 
@@ -269,7 +273,7 @@ describe('Performance Monitor', function () {
                 return;
             }
 
-            const memInfo = internalFunctions.getSystemMemory();
+            const memInfo = await internalFunctions.getSystemMemory();
 
             assert.strictEqual(memInfo.total, 16 * 1024 * 1024 * 1024);
             assert.strictEqual(memInfo.free, 8 * 1024 * 1024 * 1024);
