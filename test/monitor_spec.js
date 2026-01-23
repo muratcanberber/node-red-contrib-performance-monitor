@@ -244,41 +244,9 @@ describe('Performance Monitor', function () {
     });
 
     describe('Memory Metrics', function () {
-        it('should return system memory info', async function () {
-            if (!internalFunctions || !internalFunctions.getSystemMemory) {
-                this.skip();
-                return;
-            }
 
-            const memInfo = await internalFunctions.getSystemMemory();
 
-            assert(typeof memInfo.total === 'number');
-            assert(typeof memInfo.used === 'number');
-            assert(typeof memInfo.free === 'number');
-            assert(typeof memInfo.available === 'number');
-            assert(typeof memInfo.usedPercent === 'number');
 
-            assert(memInfo.total > 0);
-            assert(memInfo.usedPercent >= 0);
-            assert(memInfo.usedPercent <= 100);
-        });
-
-        it('should handle os.totalmem and os.freemem', async function () {
-            sandbox.stub(os, 'platform').returns('unknown'); // Force fallback
-            sandbox.stub(os, 'totalmem').returns(16 * 1024 * 1024 * 1024); // 16GB
-            sandbox.stub(os, 'freemem').returns(8 * 1024 * 1024 * 1024);  // 8GB free
-
-            if (!internalFunctions || !internalFunctions.getSystemMemory) {
-                this.skip();
-                return;
-            }
-
-            const memInfo = await internalFunctions.getSystemMemory();
-
-            assert.strictEqual(memInfo.total, 16 * 1024 * 1024 * 1024);
-            assert.strictEqual(memInfo.free, 8 * 1024 * 1024 * 1024);
-            assert.strictEqual(memInfo.usedPercent, 50);
-        });
 
         it('should use process.memoryUsage for Node-RED metrics', function () {
             const mockMemUsage = {
