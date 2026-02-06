@@ -11,6 +11,159 @@ const { exec } = require('child_process');
 const util = require('util');
 const execAsync = util.promisify(exec);
 
+/**
+ * Container/Cgroup Detection
+ * Supports both cgroups v1 and v2 for Docker/Kubernetes environments
+ */
+
+// Cgroup paths
+const CGROUP_V2_PATHS = {
+    memoryMax: '/sys/fs/cgroup/memory.max',
+    memoryCurrent: '/sys/fs/cgroup/memory.current',
+    cpuMax: '/sys/fs/cgroup/cpu.max'
+};
+
+const CGROUP_V1_PATHS = {
+    memoryLimit: '/sys/fs/cgroup/memory/memory.limit_in_bytes',
+    memoryUsage: '/sys/fs/cgroup/memory/memory.usage_in_bytes',
+    cpuQuota: '/sys/fs/cgroup/cpu/cpu.cfs_quota_us',
+    cpuPeriod: '/sys/fs/cgroup/cpu/cpu.cfs_period_us'
+};
+
+// Cache for container detection (checked once at startup)
+let containerInfo = null;
+
+/**
+ * Detect if running in a container with cgroup limits
+ * @returns {Object} Container info with memory and CPU limits
+ */
+function detectContainerEnvironment() {
+    if (containerInfo !== null) {
+        return containerInfo;
+    }
+
+    containerInfo = {
+        isContainerized: false,
+        cgroupVersion: null,
+        memoryLimit: null,
+        cpuLimit: null
+    };
+
+    // Only check on Linux (containers use Linux cgroups)
+    if (os.platform() !== 'linux') {
+        return containerInfo;
+    }
+
+    try {
+        // Try cgroups v2 first
+        if (fs.existsSync(CGROUP_V2_PATHS.memoryMax)) {
+            const memMax = fs.readFileSync(CGROUP_V2_PATHS.memoryMax, 'utf8').trim();
+
+            // "max" means no limit, otherwise it's bytes
+            if (memMax !== 'max') {
+                const memLimit = parseInt(memMax, 10);
+                // Check if limit is reasonable (less than host total and greater than 0)
+                if (memLimit > 0 && memLimit < os.totalmem()) {
+                    containerInfo.isContainerized = true;
+                    containerInfo.cgroupVersion = 2;
+                    containerInfo.memoryLimit = memLimit;
+                }
+            }
+
+            // Check CPU limit
+            if (fs.existsSync(CGROUP_V2_PATHS.cpuMax)) {
+                const cpuMax = fs.readFileSync(CGROUP_V2_PATHS.cpuMax, 'utf8').trim();
+                // Format: "$QUOTA $PERIOD" or "max $PERIOD"
+                const parts = cpuMax.split(' ');
+                if (parts[0] !== 'max' && parts.length === 2) {
+                    const quota = parseInt(parts[0], 10);
+                    const period = parseInt(parts[1], 10);
+                    if (quota > 0 && period > 0) {
+                        containerInfo.cpuLimit = quota / period;
+                        containerInfo.isContainerized = true;
+                    }
+                }
+            }
+        }
+        // Try cgroups v1 if v2 didn't work
+        else if (fs.existsSync(CGROUP_V1_PATHS.memoryLimit)) {
+            const memLimit = parseInt(fs.readFileSync(CGROUP_V1_PATHS.memoryLimit, 'utf8').trim(), 10);
+
+            // Very large values (close to max int64) mean no limit
+            const MAX_MEMORY_LIMIT = 9223372036854771712; // Common "no limit" value
+            if (memLimit > 0 && memLimit < MAX_MEMORY_LIMIT && memLimit < os.totalmem()) {
+                containerInfo.isContainerized = true;
+                containerInfo.cgroupVersion = 1;
+                containerInfo.memoryLimit = memLimit;
+            }
+
+            // Check CPU limit
+            if (fs.existsSync(CGROUP_V1_PATHS.cpuQuota) && fs.existsSync(CGROUP_V1_PATHS.cpuPeriod)) {
+                const quota = parseInt(fs.readFileSync(CGROUP_V1_PATHS.cpuQuota, 'utf8').trim(), 10);
+                const period = parseInt(fs.readFileSync(CGROUP_V1_PATHS.cpuPeriod, 'utf8').trim(), 10);
+
+                // -1 quota means no limit
+                if (quota > 0 && period > 0) {
+                    containerInfo.cpuLimit = quota / period;
+                    containerInfo.isContainerized = true;
+                }
+            }
+        }
+
+        // Additional container detection: check for .dockerenv or kubernetes service account
+        if (!containerInfo.isContainerized) {
+            if (fs.existsSync('/.dockerenv') || fs.existsSync('/var/run/secrets/kubernetes.io')) {
+                containerInfo.isContainerized = true;
+            }
+        }
+    } catch (e) {
+        // Ignore errors, use host metrics
+    }
+
+    return containerInfo;
+}
+
+/**
+ * Get container memory info if available
+ * @returns {Object|null} Container memory limits or null
+ */
+function getContainerMemory() {
+    const info = detectContainerEnvironment();
+
+    if (!info.isContainerized || !info.memoryLimit) {
+        return null;
+    }
+
+    try {
+        let currentUsage = 0;
+
+        if (info.cgroupVersion === 2 && fs.existsSync(CGROUP_V2_PATHS.memoryCurrent)) {
+            currentUsage = parseInt(fs.readFileSync(CGROUP_V2_PATHS.memoryCurrent, 'utf8').trim(), 10);
+        } else if (info.cgroupVersion === 1 && fs.existsSync(CGROUP_V1_PATHS.memoryUsage)) {
+            currentUsage = parseInt(fs.readFileSync(CGROUP_V1_PATHS.memoryUsage, 'utf8').trim(), 10);
+        }
+
+        return {
+            total: info.memoryLimit,
+            used: currentUsage,
+            free: Math.max(0, info.memoryLimit - currentUsage),
+            available: Math.max(0, info.memoryLimit - currentUsage),
+            usedPercent: Math.round((currentUsage / info.memoryLimit) * 1000) / 10
+        };
+    } catch (e) {
+        return null;
+    }
+}
+
+/**
+ * Get container CPU core limit if available
+ * @returns {number|null} Effective CPU cores or null
+ */
+function getContainerCpuLimit() {
+    const info = detectContainerEnvironment();
+    return info.cpuLimit || null;
+}
+
 module.exports = function (RED) {
     // Configuration settings
     let settings = {
@@ -89,9 +242,17 @@ module.exports = function (RED) {
 
     /**
      * Get system memory info using platform-specific methods for accuracy
+     * In containers, uses cgroup limits instead of host memory
      * @returns {Promise<Object>} System memory information
      */
     async function getSystemMemory() {
+        // Check for container memory limits first
+        const containerMem = getContainerMemory();
+        if (containerMem) {
+            return containerMem;
+        }
+
+        // Fall back to host memory detection
         const totalMem = os.totalmem();
         let freeMem = os.freemem(); // Default fallback
         let availableMem = freeMem;
@@ -182,12 +343,16 @@ module.exports = function (RED) {
 
     /**
      * Get CPU information
+     * In containers, includes effective cores based on CPU limit
      * @returns {Object} CPU info
      */
     function getCpuInfo() {
         const cpus = os.cpus();
+        const containerCpuLimit = getContainerCpuLimit();
+
         return {
             cores: cpus.length,
+            effectiveCores: containerCpuLimit || cpus.length,
             model: cpus.length > 0 ? cpus[0].model : 'Unknown',
             speed: cpus.length > 0 ? cpus[0].speed : 0
         };
@@ -262,8 +427,12 @@ module.exports = function (RED) {
             // Get System CPU
             const systemCpuPercent = getSystemCpuUsage();
 
+            // Get container info
+            const containerEnv = detectContainerEnvironment();
+
             const metrics = {
                 timestamp: now,
+                isContainerized: containerEnv.isContainerized,
                 system: {
                     platform: os.platform(),
                     arch: os.arch(),
@@ -271,6 +440,7 @@ module.exports = function (RED) {
                     cpu: {
                         percent: Math.round(systemCpuPercent * 10) / 10,
                         cores: cpuInfo.cores,
+                        effectiveCores: cpuInfo.effectiveCores,
                         model: cpuInfo.model,
                         speed: cpuInfo.speed
                     },
@@ -384,7 +554,9 @@ module.exports = function (RED) {
             resetCpuBaseline: () => {
                 lastCpuUsage = process.cpuUsage();
                 lastCpuTime = process.hrtime.bigint();
-            }
+            },
+            // Container detection functions for testing
+            resetContainerInfo: () => { containerInfo = null; }
         };
     }
 };

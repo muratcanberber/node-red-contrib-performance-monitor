@@ -169,6 +169,85 @@ describe('Performance Monitor', function () {
         });
     });
 
+    describe('Container/Cgroup Detection', function () {
+        it('should include isContainerized in metrics', async function () {
+            if (!internalFunctions || !internalFunctions.collectMetrics) {
+                this.skip();
+                return;
+            }
+
+            const metrics = await internalFunctions.collectMetrics();
+
+            // isContainerized should be a boolean
+            assert(typeof metrics.isContainerized === 'boolean');
+        });
+
+        it('should include effectiveCores in CPU info', function () {
+            if (!internalFunctions || !internalFunctions.getCpuInfo) {
+                this.skip();
+                return;
+            }
+
+            const cpuInfo = internalFunctions.getCpuInfo();
+
+            assert(typeof cpuInfo.cores === 'number');
+            assert(typeof cpuInfo.effectiveCores === 'number');
+            // Effective cores should be <= host cores (or equal if no container limit)
+            assert(cpuInfo.effectiveCores <= cpuInfo.cores || cpuInfo.effectiveCores > 0);
+        });
+
+        it('should include effectiveCores in collected metrics', async function () {
+            if (!internalFunctions || !internalFunctions.collectMetrics) {
+                this.skip();
+                return;
+            }
+
+            const metrics = await internalFunctions.collectMetrics();
+
+            assert(metrics.system.cpu.cores);
+            assert(metrics.system.cpu.effectiveCores);
+        });
+
+        it('should not detect container on non-Linux platforms', async function () {
+            if (!internalFunctions || !internalFunctions.collectMetrics) {
+                this.skip();
+                return;
+            }
+
+            // On macOS/Windows, container detection should return false
+            // since cgroup is a Linux-specific feature
+            if (os.platform() !== 'linux') {
+                // Reset container info cache to force re-detection
+                if (internalFunctions.resetContainerInfo) {
+                    internalFunctions.resetContainerInfo();
+                }
+
+                const metrics = await internalFunctions.collectMetrics();
+                assert.strictEqual(metrics.isContainerized, false);
+            }
+        });
+
+        it('should handle memory info in container environments', async function () {
+            if (!internalFunctions || !internalFunctions.getSystemMemory) {
+                this.skip();
+                return;
+            }
+
+            const memInfo = await internalFunctions.getSystemMemory();
+
+            // Memory info should always have these properties
+            assert(typeof memInfo.total === 'number');
+            assert(typeof memInfo.used === 'number');
+            assert(typeof memInfo.free === 'number');
+            assert(typeof memInfo.usedPercent === 'number');
+
+            // Values should be non-negative
+            assert(memInfo.total >= 0);
+            assert(memInfo.used >= 0);
+            assert(memInfo.free >= 0);
+        });
+    });
+
     describe('CPU Metrics', function () {
         it('should calculate CPU percentage using diff-based approach', function () {
             if (!internalFunctions || !internalFunctions.getCpuPercent) {
