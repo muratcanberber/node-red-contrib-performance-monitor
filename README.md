@@ -70,3 +70,7 @@ Access settings by clicking the **Settings** button in the sidebar toolbar.
 
 ## 🤝 License
 MIT
+[![Buy Me a Coffee](https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSpFZv2hqhfcN1rlBUHmMTKaVSfcS3E2YVDNw&s)](https://www.buymeacoffee.com/muratcanberber)
+
+
+
