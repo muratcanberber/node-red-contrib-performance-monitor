@@ -143,6 +143,52 @@ describe('MetricsStore read API', function () {
     });
 });
 
+describe('MetricsStore retention', function () {
+    let store, dbPath;
+    beforeEach(function () {
+        dbPath = tempDbPath();
+        store = new MetricsStore({ dbPath, retentionDays: 1 });
+        store.open();
+    });
+    afterEach(function () {
+        store.close();
+        if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
+        if (fs.existsSync(dbPath + '-wal')) fs.unlinkSync(dbPath + '-wal');
+        if (fs.existsSync(dbPath + '-shm')) fs.unlinkSync(dbPath + '-shm');
+    });
+
+    it('deletes samples older than retentionDays', function () {
+        const now = Date.now();
+        const old = now - 1000 * 60 * 60 * 48;
+        store.flush({
+            system: { ts: old, proc_cpu_pct: 1, proc_rss: 0, proc_heap_used: 0, proc_heap_total: 0, event_loop_lag: 0, sys_cpu_pct: 0, sys_mem_used: 0, sys_mem_total: 0, disk_used: 0, disk_total: 0, container: 0 },
+            nodes: []
+        });
+        store.flush({
+            system: { ts: now, proc_cpu_pct: 1, proc_rss: 0, proc_heap_used: 0, proc_heap_total: 0, event_loop_lag: 0, sys_cpu_pct: 0, sys_mem_used: 0, sys_mem_total: 0, disk_used: 0, disk_total: 0, container: 0 },
+            nodes: []
+        });
+        assert.strictEqual(store._db.prepare('SELECT COUNT(*) c FROM samples').get().c, 2);
+
+        const result = store.runRetention();
+        assert.strictEqual(result.deletedSamples, 1);
+        assert.strictEqual(store._db.prepare('SELECT COUNT(*) c FROM samples').get().c, 1);
+    });
+
+    it('emits "retention" event with counts', function () {
+        const now = Date.now();
+        store.flush({
+            system: { ts: now - 1000 * 60 * 60 * 48, proc_cpu_pct: 1, proc_rss: 0, proc_heap_used: 0, proc_heap_total: 0, event_loop_lag: 0, sys_cpu_pct: 0, sys_mem_used: 0, sys_mem_total: 0, disk_used: 0, disk_total: 0, container: 0 },
+            nodes: []
+        });
+        const seen = [];
+        store.on('retention', p => seen.push(p));
+        store.runRetention();
+        assert.strictEqual(seen.length, 1);
+        assert.strictEqual(seen[0].deletedSamples, 1);
+    });
+});
+
 function baseSystem(ts) {
     return {
         ts, proc_cpu_pct: 0, proc_rss: 0, proc_heap_used: 0, proc_heap_total: 0,
