@@ -100,14 +100,7 @@ module.exports = function (RED) {
         }
 
         try {
-            let currentUsage = 0;
-            const { CGROUP_V2_PATHS, CGROUP_V1_PATHS } = require('./lib/container-detect');
-
-            if (info.cgroupVersion === 2 && fs.existsSync(CGROUP_V2_PATHS.memoryCurrent)) {
-                currentUsage = parseInt(fs.readFileSync(CGROUP_V2_PATHS.memoryCurrent, 'utf8').trim(), 10);
-            } else if (info.cgroupVersion === 1 && fs.existsSync(CGROUP_V1_PATHS.memoryUsage)) {
-                currentUsage = parseInt(fs.readFileSync(CGROUP_V1_PATHS.memoryUsage, 'utf8').trim(), 10);
-            }
+            const currentUsage = readContainerMemoryUsage() || 0;
 
             return {
                 total: info.memoryLimit,
