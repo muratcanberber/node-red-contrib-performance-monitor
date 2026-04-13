@@ -42,5 +42,8 @@
   "bugs": {
     "url": "https://github.com/muratcanberber/node-red-contrib-performance-monitor/issues"
   },
-  "homepage": "https://github.com/muratcanberber/node-red-contrib-performance-monitor#readme"
+  "homepage": "https://github.com/muratcanberber/node-red-contrib-performance-monitor#readme",
+  "dependencies": {
+    "better-sqlite3": "^11.10.0"
+  }
 }
