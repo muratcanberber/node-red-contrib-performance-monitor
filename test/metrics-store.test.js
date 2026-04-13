@@ -189,6 +189,47 @@ describe('MetricsStore retention', function () {
     });
 });
 
+describe('MetricsStore degraded mode', function () {
+    it('falls back to in-memory when DB open throws, emits "store:degraded"', function () {
+        const badPath = '/this/path/does/not/exist/at/all/pm.db';
+        const store = new MetricsStore({ dbPath: badPath });
+        const seen = [];
+        store.on('store:degraded', e => seen.push(e));
+        store.openOrDegrade();
+        assert.strictEqual(store.isDegraded(), true);
+        assert.strictEqual(seen.length, 1);
+
+        const ts = Date.now();
+        store.flush({ system: { ts, proc_cpu_pct: 1, proc_rss: 0, proc_heap_used: 0, proc_heap_total: 0, event_loop_lag: 0, sys_cpu_pct: 0, sys_mem_used: 0, sys_mem_total: 0, disk_used: 0, disk_total: 0, container: 0 }, nodes: [] });
+        assert.strictEqual(store.getRecent(10).length, 1);
+        store.close();
+    });
+});
+
+describe('MetricsStore events', function () {
+    let store, dbPath;
+    beforeEach(function () {
+        dbPath = tempDbPath();
+        store = new MetricsStore({ dbPath });
+        store.open();
+    });
+    afterEach(function () {
+        store.close();
+        if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
+        if (fs.existsSync(dbPath + '-wal')) fs.unlinkSync(dbPath + '-wal');
+        if (fs.existsSync(dbPath + '-shm')) fs.unlinkSync(dbPath + '-shm');
+    });
+
+    it('inserts events and reads them back', function () {
+        const ts = Date.now();
+        store.insertEvent({ ts, kind: 'deploy', detail: { by: 'admin' } });
+        const events = store.getEvents(ts - 1000, ts + 1000);
+        assert.strictEqual(events.length, 1);
+        assert.strictEqual(events[0].kind, 'deploy');
+        assert.deepStrictEqual(JSON.parse(events[0].detail), { by: 'admin' });
+    });
+});
+
 function baseSystem(ts) {
     return {
         ts, proc_cpu_pct: 0, proc_rss: 0, proc_heap_used: 0, proc_heap_total: 0,
