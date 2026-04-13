@@ -78,6 +78,71 @@ describe('MetricsStore', function () {
     });
 });
 
+describe('MetricsStore read API', function () {
+    let store, dbPath;
+    beforeEach(function () {
+        dbPath = tempDbPath();
+        store = new MetricsStore({ dbPath });
+        store.open();
+        const base = Date.now() - 1000 * 60 * 10;
+        for (let i = 0; i < 10; i++) {
+            const ts = base + i * 1000;
+            store.flush({
+                system: {
+                    ts, proc_cpu_pct: i * 10, proc_rss: 1000 + i, proc_heap_used: 500,
+                    proc_heap_total: 800, event_loop_lag: 1.0,
+                    sys_cpu_pct: i * 5, sys_mem_used: 2000, sys_mem_total: 8000,
+                    disk_used: 100, disk_total: 1000, container: 0
+                },
+                nodes: [
+                    { node_id: 'n1', node_type: 'function', msg_count: i + 1, avg_process_ms: 1.5, error_count: 0, last_error_ts: null },
+                    { node_id: 'n2', node_type: 'inject',   msg_count: 1,     avg_process_ms: 0.1, error_count: i % 3 === 0 ? 1 : 0, last_error_ts: i % 3 === 0 ? ts : null }
+                ]
+            });
+        }
+    });
+    afterEach(function () {
+        store.close();
+        if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
+        if (fs.existsSync(dbPath + '-wal')) fs.unlinkSync(dbPath + '-wal');
+        if (fs.existsSync(dbPath + '-shm')) fs.unlinkSync(dbPath + '-shm');
+    });
+
+    it('getRange raw returns rows within bounds', function () {
+        const now = Date.now();
+        const rows = store.getRange(now - 60_000 * 20, now);
+        assert.strictEqual(rows.length, 10);
+    });
+
+    it('getRange with bucketMs groups via SQL', function () {
+        const now = Date.now();
+        const rows = store.getRange(now - 60_000 * 20, now, { bucketMs: 2000 });
+        assert.ok(rows.length > 0 && rows.length < 10, 'bucketed rows should be fewer than raw');
+        assert.ok('proc_cpu_pct' in rows[0], 'bucket rows expose avg columns');
+    });
+
+    it('getNodeStats returns only that node', function () {
+        const now = Date.now();
+        const rows = store.getNodeStats('n1', now - 60_000 * 20, now);
+        assert.strictEqual(rows.length, 10);
+        assert.ok(rows.every(r => r.node_id === 'n1'));
+    });
+
+    it('getTopNodes ranks by msg_count', function () {
+        const now = Date.now();
+        const top = store.getTopNodes(now - 60_000 * 20, now, { metric: 'msg_count', n: 5 });
+        assert.strictEqual(top[0].node_id, 'n1');
+    });
+
+    it('getSummary returns min/max/avg/p95 for proc_cpu_pct', function () {
+        const now = Date.now();
+        const s = store.getSummary(60_000 * 20);
+        assert.ok(s.proc_cpu_pct);
+        assert.strictEqual(s.proc_cpu_pct.min, 0);
+        assert.strictEqual(s.proc_cpu_pct.max, 90);
+    });
+});
+
 function baseSystem(ts) {
     return {
         ts, proc_cpu_pct: 0, proc_rss: 0, proc_heap_used: 0, proc_heap_total: 0,
