@@ -1,0 +1,100 @@
+<h2>Anomaly Detection — Design</h2>
+<p class="subtitle">lib/anomaly-detector.js — subscribes to store, fires alerts</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">How it works — pipeline</div>
+    <div class="mockup-body" style="padding:16px;font-size:12px;">
+
+      <div style="display:flex;flex-direction:column;gap:10px;">
+
+        <div style="background:#e8f4fd;border-radius:6px;padding:10px;border-left:3px solid #2d6cdf;">
+          <b>1. MetricsStore emits <code>sample</code> event</b><br>
+          <span style="color:#555;font-size:11px;">Every pollInterval (2s default) — AnomalyDetector receives full snapshot</span>
+        </div>
+
+        <div style="text-align:center;color:#888;font-size:18px;">↓</div>
+
+        <div style="background:#f9f5ff;border-radius:6px;padding:10px;border-left:3px solid #8e44ad;">
+          <b>2. Per-metric evaluators run</b>
+          <div style="margin-top:6px;display:flex;flex-direction:column;gap:4px;font-size:11px;color:#555;">
+            <span>🔥 <b>CPU spike</b> — rolling 60s avg &gt; threshold OR &gt; μ + Nσ</span>
+            <span>📈 <b>Mem leak</b> — linear regression on heap samples, slope &gt; limit</span>
+            <span>⏱ <b>Loop block</b> — sustained lag &gt; threshold for duration window</span>
+            <span>📊 <b>Traffic anomaly</b> — msg/s drops or spikes vs rolling baseline</span>
+          </div>
+        </div>
+
+        <div style="text-align:center;color:#888;font-size:18px;">↓</div>
+
+        <div style="background:#fff8ec;border-radius:6px;padding:10px;border-left:3px solid #e67e22;">
+          <b>3. Anomaly confirmed → cooldown check</b><br>
+          <span style="font-size:11px;color:#555;">60s cooldown per metric — prevents alert storm. One anomaly fires once until resolved.</span>
+        </div>
+
+        <div style="text-align:center;color:#888;font-size:18px;">↓</div>
+
+        <div style="background:#ffeaea;border-radius:6px;padding:10px;border-left:3px solid #c0392b;">
+          <b>4. Alert fires</b>
+          <div style="margin-top:6px;font-size:11px;color:#555;display:flex;flex-direction:column;gap:3px;">
+            <span>→ <b>store.insertEvent</b> (kind: 'anomaly') — persisted, visible on chart</span>
+            <span>→ <b>RED runtime event</b> → Node-RED notification bar</span>
+            <span>→ <b>perf-monitor flow node</b> output fires alarm msg</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">Anomalies on the report page</div>
+    <div class="mockup-body" style="padding:12px;">
+
+      <!-- Mini chart with anomaly markers -->
+      <div style="background:#fff;border-radius:6px;padding:10px;margin-bottom:10px;">
+        <div style="font-size:11px;font-weight:bold;margin-bottom:6px;">CPU — anomaly markers on chart</div>
+        <svg width="100%" height="70" viewBox="0 0 300 70" preserveAspectRatio="none">
+          <polyline points="0,65 40,62 80,58 120,55 160,20 180,18 200,55 240,60 280,62 300,63" fill="none" stroke="#2d6cdf" stroke-width="2"/>
+          <!-- anomaly zone -->
+          <rect x="150" y="0" width="55" height="70" fill="#c0392b15"/>
+          <line x1="150" y1="0" x2="150" y2="70" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="3,2"/>
+          <text x="153" y="12" font-size="8" fill="#c0392b">⚠ anomaly</text>
+          <!-- threshold line -->
+          <line x1="0" y1="35" x2="300" y2="35" stroke="#e67e22" stroke-width="1" stroke-dasharray="4,2" opacity="0.6"/>
+          <text x="4" y="32" font-size="8" fill="#e67e22">threshold</text>
+        </svg>
+      </div>
+
+      <!-- Anomaly log -->
+      <div style="font-size:11px;font-weight:bold;margin-bottom:6px;">Anomaly log</div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <div style="background:#ffeaea;border-radius:4px;padding:8px;border-left:3px solid #c0392b;">
+          <div style="display:flex;justify-content:space-between;">
+            <b style="color:#c0392b;">CPU spike</b>
+            <span style="color:#888;font-size:10px;">14:23:10 · 45s duration</span>
+          </div>
+          <div style="color:#555;font-size:10px;margin-top:2px;">Process CPU reached 94.2% (threshold: 80%, mode: fixed). Deploy event nearby — possible false positive.</div>
+        </div>
+        <div style="background:#fff8ec;border-radius:4px;padding:8px;border-left:3px solid #e67e22;">
+          <div style="display:flex;justify-content:space-between;">
+            <b style="color:#e67e22;">Heap growth</b>
+            <span style="color:#888;font-size:10px;">13:01:00 · ongoing</span>
+          </div>
+          <div style="color:#555;font-size:10px;margin-top:2px;">Heap growing at 62 MB/hr over last 30 min (baseline: 8 MB/hr). Possible memory leak.</div>
+        </div>
+      </div>
+
+      <!-- Security note -->
+      <div style="margin-top:10px;background:#1a1a2e;color:#fff;border-radius:6px;padding:10px;font-size:10px;">
+        <b style="color:#e74c3c;">⚠ Security patterns detected automatically:</b>
+        <ul style="margin:4px 0 0 12px;padding:0;color:#ccc;line-height:1.8;">
+          <li>Sustained CPU &gt; 90% → possible crypto-mining</li>
+          <li>Monotonic heap growth → memory leak / injection</li>
+          <li>Event loop blocked &gt; 500ms → DoS pattern</li>
+          <li>Traffic drop to 0 → possible crash / kill signal</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+</div>

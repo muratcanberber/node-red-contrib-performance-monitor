@@ -1,0 +1,108 @@
+<h2>Alarm Configuration — How it works</h2>
+<p class="subtitle">Clicking "⚙ Alarms" opens a panel on the right side of the report page</p>
+
+<div class="mockup">
+  <div class="mockup-header">Report page — Alarm Panel (slides in from right)</div>
+  <div class="mockup-body" style="padding:0;display:flex;min-height:400px;">
+
+    <!-- Dimmed report page behind -->
+    <div style="flex:1;background:#f0f0f0;padding:20px;opacity:0.4;font-size:11px;color:#888;">
+      [Charts visible behind panel...]
+    </div>
+
+    <!-- Alarm panel -->
+    <div style="width:320px;background:#fff;border-left:1px solid #ddd;display:flex;flex-direction:column;box-shadow:-4px 0 16px rgba(0,0,0,0.1);">
+      <div style="padding:14px 16px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-weight:bold;font-size:13px;">⚙ Alarm Rules</span>
+        <span style="cursor:pointer;color:#888;font-size:16px;">✕</span>
+      </div>
+
+      <div style="flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px;">
+
+        <!-- Existing rule 1 -->
+        <div style="border:1px solid #e0e0e0;border-radius:6px;padding:10px;background:#fff8f8;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span style="font-size:11px;font-weight:bold;color:#c0392b;">🔴 CPU spike</span>
+            <div style="display:flex;gap:6px;">
+              <span style="font-size:10px;color:#888;cursor:pointer;">edit</span>
+              <span style="font-size:10px;color:#c0392b;cursor:pointer;">delete</span>
+            </div>
+          </div>
+          <div style="font-size:11px;color:#555;display:grid;grid-template-columns:auto 1fr;gap:4px 8px;">
+            <span style="color:#888;">Metric:</span><span>Process CPU %</span>
+            <span style="color:#888;">Condition:</span><span>above <b>80%</b> for <b>30s</b></span>
+            <span style="color:#888;">Mode:</span><span>Fixed threshold</span>
+            <span style="color:#888;">Action:</span><span>Node-RED notification + flow node</span>
+          </div>
+        </div>
+
+        <!-- Existing rule 2 -->
+        <div style="border:1px solid #e0e0e0;border-radius:6px;padding:10px;background:#fff8ec;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span style="font-size:11px;font-weight:bold;color:#e67e22;">🟡 Heap growth</span>
+            <div style="display:flex;gap:6px;">
+              <span style="font-size:10px;color:#888;cursor:pointer;">edit</span>
+              <span style="font-size:10px;color:#c0392b;cursor:pointer;">delete</span>
+            </div>
+          </div>
+          <div style="font-size:11px;color:#555;display:grid;grid-template-columns:auto 1fr;gap:4px 8px;">
+            <span style="color:#888;">Metric:</span><span>Heap Used</span>
+            <span style="color:#888;">Condition:</span><span>grows &gt; <b>50 MB/hr</b></span>
+            <span style="color:#888;">Mode:</span><span>Statistical (auto-baseline)</span>
+            <span style="color:#888;">Action:</span><span>Node-RED notification + flow node</span>
+          </div>
+        </div>
+
+        <!-- Add new rule form -->
+        <div style="border:2px dashed #2d6cdf;border-radius:6px;padding:12px;background:#f0f6ff;">
+          <div style="font-size:11px;font-weight:bold;color:#2d6cdf;margin-bottom:8px;">+ New alarm rule</div>
+
+          <div style="display:grid;gap:8px;">
+            <div>
+              <label style="font-size:10px;color:#666;display:block;margin-bottom:2px;">Metric</label>
+              <select style="width:100%;padding:4px 6px;border:1px solid #ccc;border-radius:4px;font-size:11px;">
+                <option>Process CPU %</option>
+                <option>System CPU %</option>
+                <option>Heap Used</option>
+                <option>RSS Memory</option>
+                <option>Event Loop Lag</option>
+                <option>Disk Used %</option>
+                <option>Node error rate</option>
+              </select>
+            </div>
+
+            <div>
+              <label style="font-size:10px;color:#666;display:block;margin-bottom:2px;">Detection mode</label>
+              <select style="width:100%;padding:4px 6px;border:1px solid #ccc;border-radius:4px;font-size:11px;">
+                <option>Fixed threshold</option>
+                <option>Statistical (auto-baseline)</option>
+              </select>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+              <div>
+                <label style="font-size:10px;color:#666;display:block;margin-bottom:2px;">Threshold / σ</label>
+                <input type="number" value="80" style="width:100%;padding:4px 6px;border:1px solid #ccc;border-radius:4px;font-size:11px;">
+              </div>
+              <div>
+                <label style="font-size:10px;color:#666;display:block;margin-bottom:2px;">Duration (s)</label>
+                <input type="number" value="30" style="width:100%;padding:4px 6px;border:1px solid #ccc;border-radius:4px;font-size:11px;">
+              </div>
+            </div>
+
+            <div>
+              <label style="font-size:10px;color:#666;display:block;margin-bottom:2px;">Alert via</label>
+              <div style="display:flex;gap:8px;font-size:11px;">
+                <label><input type="checkbox" checked> NR notification</label>
+                <label><input type="checkbox" checked> Flow node output</label>
+              </div>
+            </div>
+
+            <button style="background:#2d6cdf;color:#fff;border:none;border-radius:4px;padding:6px;font-size:11px;cursor:pointer;width:100%;">Save rule</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
