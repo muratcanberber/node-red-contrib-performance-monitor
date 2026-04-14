@@ -85,7 +85,7 @@ module.exports = function (RED) {
         }
 
         if (mode === 'inject' || mode === 'both') {
-            node.on('input', (msg, send, done) => {
+            const onInput = (msg, send, done) => {
                 const recent = store.getRecent(1);
                 if (recent.length > 0) {
                     sendPayload(recent[0], []);
@@ -95,7 +95,9 @@ module.exports = function (RED) {
                     node.status({ fill: 'red', shape: 'ring', text: 'no sample yet' });
                 }
                 if (done) done();
-            });
+            };
+            node.on('input', onInput);
+            node.on('close', () => node.off('input', onInput));
         }
 
         const onAlarm = (payload) => {
