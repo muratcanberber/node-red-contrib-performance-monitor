@@ -10,7 +10,9 @@
             paneFontFamily: 'Helvetica Neue',
             hudSize: 'Normal',
             hudTheme: 'classic',
-            hideHud: false
+            hideHud: false,
+            retentionDays: 7,
+            maxDbSizeMB: 500
         };
 
         let pollTimer = null;
@@ -546,6 +548,14 @@
                                 <option value="10000">10 seconds</option>
                             </select>
                         </div>
+                        <div class="pm-setting-row">
+                            <label>History Retention</label>
+                            <input type="number" id="pm-setting-retentionDays" min="1" max="90" value="${settings.retentionDays}"> days
+                        </div>
+                        <div class="pm-setting-row">
+                            <label>Max DB Size</label>
+                            <input type="number" id="pm-setting-maxDbSizeMB" min="50" max="10000" value="${settings.maxDbSizeMB}"> MB
+                        </div>
                     </div>
 
                     <div class="pm-setting-section">
@@ -612,6 +622,8 @@
 
             // Set current values
             document.getElementById('pm-setting-interval').value = settings.refreshInterval;
+            document.getElementById('pm-setting-retentionDays').value = settings.retentionDays;
+            document.getElementById('pm-setting-maxDbSizeMB').value = settings.maxDbSizeMB;
             document.getElementById('pm-setting-fontFamily').value = settings.paneFontFamily;
             document.getElementById('pm-setting-hudSize').value = settings.hudSize;
 
@@ -1339,6 +1351,8 @@
             saveSettings: async () => {
                 const newSettings = {
                     refreshInterval: parseInt(document.getElementById('pm-setting-interval').value) || 2000,
+                    retentionDays: parseInt(document.getElementById('pm-setting-retentionDays').value) || 7,
+                    maxDbSizeMB: parseInt(document.getElementById('pm-setting-maxDbSizeMB').value) || 500,
                     paneFontSize: parseInt(document.getElementById('pm-setting-fontSize').value) || 12,
                     paneFontFamily: document.getElementById('pm-setting-fontFamily').value || 'Helvetica Neue',
                     hudSize: document.getElementById('pm-setting-hudWidgetSize').value || 'Normal',

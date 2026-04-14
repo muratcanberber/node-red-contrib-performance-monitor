@@ -37,6 +37,7 @@ describe('Performance Monitor', function () {
     let sandbox;
     let monitorModule;
     let internalFunctions;
+    let containerDetect;
 
     beforeEach(function () {
         sandbox = sinon.createSandbox();
@@ -47,6 +48,9 @@ describe('Performance Monitor', function () {
         RED.httpAdmin.get.reset();
         RED.httpAdmin.post.reset();
         RED.plugins.registerPlugin.reset();
+
+        delete require.cache[require.resolve('../lib/container-detect.js')];
+        containerDetect = require('../lib/container-detect.js');
 
         // Load the module fresh
         delete require.cache[require.resolve('../performance-monitor.js')];
@@ -217,10 +221,7 @@ describe('Performance Monitor', function () {
             // On macOS/Windows, container detection should return false
             // since cgroup is a Linux-specific feature
             if (os.platform() !== 'linux') {
-                // Reset container info cache to force re-detection
-                if (internalFunctions.resetContainerInfo) {
-                    internalFunctions.resetContainerInfo();
-                }
+                containerDetect.detectContainerEnvironment({ force: true });
 
                 const metrics = await internalFunctions.collectMetrics();
                 assert.strictEqual(metrics.isContainerized, false);

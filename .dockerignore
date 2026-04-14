@@ -1,0 +1,8 @@
+node_modules
+.git
+.worktrees
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+coverage
+test-results

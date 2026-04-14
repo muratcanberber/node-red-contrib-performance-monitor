@@ -10,137 +10,26 @@ const fs = require('fs');
 const { exec } = require('child_process');
 const util = require('util');
 const execAsync = util.promisify(exec);
+const containerDetect = require('./lib/container-detect');
+const MetricsStore = require('./lib/metrics-store');
+const { registerRoutes } = require('./lib/http-routes');
 
-/**
- * Container/Cgroup Detection
- * Supports both cgroups v1 and v2 for Docker/Kubernetes environments
- */
-
-// Cgroup paths
-const CGROUP_V2_PATHS = {
-    memoryMax: '/sys/fs/cgroup/memory.max',
-    memoryCurrent: '/sys/fs/cgroup/memory.current',
-    cpuMax: '/sys/fs/cgroup/cpu.max'
-};
-
-const CGROUP_V1_PATHS = {
-    memoryLimit: '/sys/fs/cgroup/memory/memory.limit_in_bytes',
-    memoryUsage: '/sys/fs/cgroup/memory/memory.usage_in_bytes',
-    cpuQuota: '/sys/fs/cgroup/cpu/cpu.cfs_quota_us',
-    cpuPeriod: '/sys/fs/cgroup/cpu/cpu.cfs_period_us'
-};
-
-// Cache for container detection (checked once at startup)
-let containerInfo = null;
-
-/**
- * Detect if running in a container with cgroup limits
- * @returns {Object} Container info with memory and CPU limits
- */
-function detectContainerEnvironment() {
-    if (containerInfo !== null) {
-        return containerInfo;
-    }
-
-    containerInfo = {
-        isContainerized: false,
-        cgroupVersion: null,
-        memoryLimit: null,
-        cpuLimit: null
-    };
-
-    // Only check on Linux (containers use Linux cgroups)
-    if (os.platform() !== 'linux') {
-        return containerInfo;
-    }
-
-    try {
-        // Try cgroups v2 first
-        if (fs.existsSync(CGROUP_V2_PATHS.memoryMax)) {
-            const memMax = fs.readFileSync(CGROUP_V2_PATHS.memoryMax, 'utf8').trim();
-
-            // "max" means no limit, otherwise it's bytes
-            if (memMax !== 'max') {
-                const memLimit = parseInt(memMax, 10);
-                // Check if limit is reasonable (less than host total and greater than 0)
-                if (memLimit > 0 && memLimit < os.totalmem()) {
-                    containerInfo.isContainerized = true;
-                    containerInfo.cgroupVersion = 2;
-                    containerInfo.memoryLimit = memLimit;
-                }
-            }
-
-            // Check CPU limit
-            if (fs.existsSync(CGROUP_V2_PATHS.cpuMax)) {
-                const cpuMax = fs.readFileSync(CGROUP_V2_PATHS.cpuMax, 'utf8').trim();
-                // Format: "$QUOTA $PERIOD" or "max $PERIOD"
-                const parts = cpuMax.split(' ');
-                if (parts[0] !== 'max' && parts.length === 2) {
-                    const quota = parseInt(parts[0], 10);
-                    const period = parseInt(parts[1], 10);
-                    if (quota > 0 && period > 0) {
-                        containerInfo.cpuLimit = quota / period;
-                        containerInfo.isContainerized = true;
-                    }
-                }
-            }
-        }
-        // Try cgroups v1 if v2 didn't work
-        else if (fs.existsSync(CGROUP_V1_PATHS.memoryLimit)) {
-            const memLimit = parseInt(fs.readFileSync(CGROUP_V1_PATHS.memoryLimit, 'utf8').trim(), 10);
-
-            // Very large values (close to max int64) mean no limit
-            const MAX_MEMORY_LIMIT = 9223372036854771712; // Common "no limit" value
-            if (memLimit > 0 && memLimit < MAX_MEMORY_LIMIT && memLimit < os.totalmem()) {
-                containerInfo.isContainerized = true;
-                containerInfo.cgroupVersion = 1;
-                containerInfo.memoryLimit = memLimit;
-            }
-
-            // Check CPU limit
-            if (fs.existsSync(CGROUP_V1_PATHS.cpuQuota) && fs.existsSync(CGROUP_V1_PATHS.cpuPeriod)) {
-                const quota = parseInt(fs.readFileSync(CGROUP_V1_PATHS.cpuQuota, 'utf8').trim(), 10);
-                const period = parseInt(fs.readFileSync(CGROUP_V1_PATHS.cpuPeriod, 'utf8').trim(), 10);
-
-                // -1 quota means no limit
-                if (quota > 0 && period > 0) {
-                    containerInfo.cpuLimit = quota / period;
-                    containerInfo.isContainerized = true;
-                }
-            }
-        }
-
-        // Additional container detection: check for .dockerenv or kubernetes service account
-        if (!containerInfo.isContainerized) {
-            if (fs.existsSync('/.dockerenv') || fs.existsSync('/var/run/secrets/kubernetes.io')) {
-                containerInfo.isContainerized = true;
-            }
-        }
-    } catch (e) {
-        // Ignore errors, use host metrics
-    }
-
-    return containerInfo;
+function detectContainerEnvironment(options) {
+    return containerDetect.detectContainerEnvironment(options);
 }
 
-/**
- * Get container memory info if available
- * @returns {Object|null} Container memory limits or null
- */
 function getContainerMemory() {
-    const info = detectContainerEnvironment();
+    const info = containerDetect.detectContainerEnvironment();
 
     if (!info.isContainerized || !info.memoryLimit) {
         return null;
     }
 
     try {
-        let currentUsage = 0;
+        let currentUsage = containerDetect.readContainerMemoryUsage();
 
-        if (info.cgroupVersion === 2 && fs.existsSync(CGROUP_V2_PATHS.memoryCurrent)) {
-            currentUsage = parseInt(fs.readFileSync(CGROUP_V2_PATHS.memoryCurrent, 'utf8').trim(), 10);
-        } else if (info.cgroupVersion === 1 && fs.existsSync(CGROUP_V1_PATHS.memoryUsage)) {
-            currentUsage = parseInt(fs.readFileSync(CGROUP_V1_PATHS.memoryUsage, 'utf8').trim(), 10);
+        if (currentUsage === null) {
+            currentUsage = 0;
         }
 
         return {
@@ -155,15 +44,10 @@ function getContainerMemory() {
     }
 }
 
-/**
- * Get container CPU core limit if available
- * @returns {number|null} Effective CPU cores or null
- */
 function getContainerCpuLimit() {
-    const info = detectContainerEnvironment();
+    const info = containerDetect.detectContainerEnvironment();
     return info.cpuLimit || null;
 }
-
 module.exports = function (RED) {
     // Configuration settings
     let settings = {
@@ -172,7 +56,9 @@ module.exports = function (RED) {
         paneFontFamily: 'Helvetica Neue',
         hudSize: 'Normal',
         hudTheme: 'classic',
-        hideHud: false
+        hideHud: false,
+        retentionDays: 7,
+        maxDbSizeMB: 500
     };
 
     // CPU Usage Tracking (diff-based)
@@ -189,6 +75,21 @@ module.exports = function (RED) {
         data: null,
         timestamp: 0
     };
+    let lastPersistedTimestamp = 0;
+    let sampleTimer = null;
+    let retentionTimer = null;
+    const userDir = RED.settings && RED.settings.userDir ? RED.settings.userDir : process.cwd();
+    const store = new MetricsStore({
+        dbPath: path.join(userDir, 'performance-monitor.db'),
+        retentionDays: settings.retentionDays,
+        maxDbSizeMB: settings.maxDbSizeMB
+    });
+
+    store.openOrDegrade();
+
+    if (store.isDegraded()) {
+        RED.log.warn('Performance Monitor: SQLite store unavailable, running in degraded in-memory mode');
+    }
 
     /**
      * Calculate CPU usage percentage using diff-based process.cpuUsage()
@@ -477,6 +378,109 @@ module.exports = function (RED) {
         }
     }
 
+    function mapMetricsToStoreSample(metrics) {
+        return {
+            ts: metrics.timestamp,
+            proc_cpu_pct: metrics.nodeRed.cpu,
+            proc_rss: metrics.nodeRed.memory.rss,
+            proc_heap_used: metrics.nodeRed.memory.heapUsed,
+            proc_heap_total: metrics.nodeRed.memory.heapTotal,
+            event_loop_lag: metrics.nodeRed.eventLoopLag,
+            sys_cpu_pct: metrics.system.cpu.percent,
+            sys_mem_used: metrics.system.memory.used,
+            sys_mem_total: metrics.system.memory.total,
+            disk_used: metrics.system.disk.used,
+            disk_total: metrics.system.disk.total,
+            container: metrics.isContainerized ? 1 : 0
+        };
+    }
+
+    async function collectAndPersistMetrics() {
+        const metrics = await collectMetrics();
+
+        if (!metrics || metrics.error || !metrics.timestamp || metrics.timestamp === lastPersistedTimestamp) {
+            return metrics;
+        }
+
+        try {
+            store.flush({
+                system: mapMetricsToStoreSample(metrics),
+                nodes: []
+            });
+            lastPersistedTimestamp = metrics.timestamp;
+        } catch (error) {
+            RED.log.warn('Performance Monitor: Could not persist metrics - ' + error.message);
+        }
+
+        return metrics;
+    }
+
+    function startSamplingLoop() {
+        if (sampleTimer) {
+            clearInterval(sampleTimer);
+        }
+
+        sampleTimer = setInterval(() => {
+            collectAndPersistMetrics().catch((error) => {
+                RED.log.warn('Performance Monitor: Sampling loop failed - ' + error.message);
+            });
+        }, settings.refreshInterval);
+
+        collectAndPersistMetrics().catch((error) => {
+            RED.log.warn('Performance Monitor: Initial sample failed - ' + error.message);
+        });
+    }
+
+    function stopSamplingLoop() {
+        if (sampleTimer) {
+            clearInterval(sampleTimer);
+            sampleTimer = null;
+        }
+    }
+
+    function getSettingsPayload() {
+        return {
+            refreshInterval: settings.refreshInterval,
+            paneFontSize: settings.paneFontSize,
+            paneFontFamily: settings.paneFontFamily,
+            hudSize: settings.hudSize,
+            hudTheme: settings.hudTheme,
+            hideHud: settings.hideHud,
+            retentionDays: store.retentionDays,
+            maxDbSizeMB: store.maxDbSizeMB
+        };
+    }
+
+    function updateSettings(patch) {
+        if (patch.refreshInterval !== undefined) {
+            settings.refreshInterval = parseInt(patch.refreshInterval, 10) || 2000;
+            startSamplingLoop();
+        }
+        if (patch.paneFontSize !== undefined) {
+            settings.paneFontSize = parseInt(patch.paneFontSize, 10) || 12;
+        }
+        if (patch.paneFontFamily !== undefined) {
+            settings.paneFontFamily = patch.paneFontFamily || 'Helvetica Neue';
+        }
+        if (patch.hudSize !== undefined) {
+            settings.hudSize = patch.hudSize || 'Normal';
+        }
+        if (patch.hudTheme !== undefined) {
+            settings.hudTheme = patch.hudTheme || 'classic';
+        }
+        if (patch.hideHud !== undefined) {
+            settings.hideHud = !!patch.hideHud;
+        }
+        if (patch.retentionDays !== undefined) {
+            store.retentionDays = parseInt(patch.retentionDays, 10) || 7;
+        }
+        if (patch.maxDbSizeMB !== undefined) {
+            store.maxDbSizeMB = parseInt(patch.maxDbSizeMB, 10) || 500;
+        }
+
+        return getSettingsPayload();
+    }
+
     // Register the plugin
     RED.plugins.registerPlugin('performance-monitor', {
         type: 'sidebar',
@@ -486,6 +490,15 @@ module.exports = function (RED) {
 
             // Start event loop lag measurement
             startLagMeasurement();
+            startSamplingLoop();
+
+            retentionTimer = setInterval(() => {
+                try {
+                    store.runRetention();
+                } catch (error) {
+                    RED.log.warn('Performance Monitor: Retention sweep failed - ' + error.message);
+                }
+            }, 60 * 60 * 1000);
 
             // API: Get Stats
             RED.httpAdmin.get('/performance-monitor/stats', async function (req, res) {
@@ -497,32 +510,11 @@ module.exports = function (RED) {
                 }
             });
 
-            // API: Get Settings
-            RED.httpAdmin.get('/performance-monitor/settings', function (req, res) {
-                res.json(settings);
-            });
-
-            // API: Set Settings
-            RED.httpAdmin.post('/performance-monitor/settings', function (req, res) {
-                if (req.body.refreshInterval !== undefined) {
-                    settings.refreshInterval = parseInt(req.body.refreshInterval) || 2000;
-                }
-                if (req.body.paneFontSize !== undefined) {
-                    settings.paneFontSize = parseInt(req.body.paneFontSize) || 12;
-                }
-                if (req.body.paneFontFamily !== undefined) {
-                    settings.paneFontFamily = req.body.paneFontFamily || 'Helvetica Neue';
-                }
-                if (req.body.hudSize !== undefined) {
-                    settings.hudSize = req.body.hudSize || 'Normal';
-                }
-                if (req.body.hudTheme !== undefined) {
-                    settings.hudTheme = req.body.hudTheme || 'classic';
-                }
-                if (req.body.hideHud !== undefined) {
-                    settings.hideHud = !!req.body.hideHud;
-                }
-                res.json(settings);
+            registerRoutes({
+                RED: RED,
+                store: store,
+                getSettings: getSettingsPayload,
+                updateSettings: updateSettings
             });
 
             // Serve the sidebar HTML
@@ -550,13 +542,18 @@ module.exports = function (RED) {
             setEventLoopLag: (val) => { eventLoopLag = val; },
             stopLagMeasurement: () => {
                 if (lagMeasureTimer) clearInterval(lagMeasureTimer);
+                stopSamplingLoop();
+                if (retentionTimer) clearInterval(retentionTimer);
+                store.close();
             },
             resetCpuBaseline: () => {
                 lastCpuUsage = process.cpuUsage();
                 lastCpuTime = process.hrtime.bigint();
             },
             // Container detection functions for testing
-            resetContainerInfo: () => { containerInfo = null; }
+            resetContainerInfo: () => { containerDetect.resetContainerCache(); },
+            store: store,
+            getSettings: getSettingsPayload
         };
     }
 };
