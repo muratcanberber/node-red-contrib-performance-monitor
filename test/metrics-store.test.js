@@ -107,6 +107,49 @@ describe('MetricsStore', function () {
         });
         assert.strictEqual(store.getRecent(10).length, 1);
     });
+
+    describe('alarm rules CRUD', function () {
+        it('getAlarmRules returns empty array initially', function () {
+            const rules = store.getAlarmRules();
+            assert.deepStrictEqual(rules, []);
+        });
+
+        it('insertAlarmRule creates and returns rule with id', function () {
+            const rule = store.insertAlarmRule({
+                metric: 'proc_cpu_pct',
+                mode: 'fixed',
+                threshold: 80,
+                duration_s: 30,
+                enabled: 1
+            });
+            assert.ok(rule.id > 0, 'id must be positive integer');
+            assert.strictEqual(rule.metric, 'proc_cpu_pct');
+            assert.strictEqual(rule.threshold, 80);
+            assert.strictEqual(rule.enabled, 1);
+        });
+
+        it('getAlarmRules returns inserted rules', function () {
+            store.insertAlarmRule({ metric: 'event_loop_lag', mode: 'fixed', threshold: 500, duration_s: 10, enabled: 1 });
+            const rules = store.getAlarmRules();
+            assert.ok(rules.length >= 1);
+            assert.ok(rules.some(r => r.metric === 'event_loop_lag'));
+        });
+
+        it('updateAlarmRule modifies existing rule', function () {
+            const rule = store.insertAlarmRule({ metric: 'proc_heap_used', mode: 'fixed', threshold: 500, duration_s: 60, enabled: 1 });
+            const updated = store.updateAlarmRule(rule.id, { threshold: 600, enabled: 0 });
+            assert.strictEqual(updated.threshold, 600);
+            assert.strictEqual(updated.enabled, 0);
+            assert.strictEqual(updated.metric, 'proc_heap_used'); // unchanged field
+        });
+
+        it('deleteAlarmRule removes rule', function () {
+            const rule = store.insertAlarmRule({ metric: 'sys_cpu_pct', mode: 'statistical', threshold: 3, duration_s: 30, enabled: 1 });
+            store.deleteAlarmRule(rule.id);
+            const rules = store.getAlarmRules();
+            assert.ok(!rules.some(r => r.id === rule.id));
+        });
+    });
 });
 
 describe('MetricsStore read API', function () {
