@@ -1,0 +1,96 @@
+<script type="text/javascript">
+    RED.nodes.registerType('perf-monitor', {
+        category: 'monitoring',
+        color: '#3FAEE8',
+        defaults: {
+            name:             { value: '' },
+            mode:             { value: 'both' },
+            interval:         { value: 2000 },
+            includeNodeStats: { value: true },
+            disableLogging:   { value: false }
+        },
+        inputs: 1,
+        outputs: 1,
+        icon: 'font-awesome/fa-tachometer',
+        label: function () { return this.name || 'perf-monitor'; },
+        labelStyle: function () { return this.name ? 'node_label_italic' : ''; },
+        oneditprepare: function () {
+            var modeSelect = $('#node-input-mode');
+            var intervalRow = $('#node-input-interval').closest('.form-row');
+
+            function toggleInterval() {
+                if (modeSelect.val() === 'inject') {
+                    intervalRow.hide();
+                } else {
+                    intervalRow.show();
+                }
+            }
+            modeSelect.on('change', toggleInterval);
+            toggleInterval();
+        }
+    });
+</script>
+
+<script type="text/html" data-template-name="perf-monitor">
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-mode"><i class="fa fa-cogs"></i> Mode</label>
+        <select id="node-input-mode">
+            <option value="both">Both (inject + interval)</option>
+            <option value="inject">Inject only</option>
+            <option value="interval">Interval only</option>
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="node-input-interval"><i class="fa fa-clock-o"></i> Interval (ms)</label>
+        <input type="number" id="node-input-interval" min="500" step="500">
+    </div>
+    <div class="form-row">
+        <label for="node-input-includeNodeStats"><i class="fa fa-list"></i> Include node stats</label>
+        <input type="checkbox" id="node-input-includeNodeStats" style="width:auto">
+    </div>
+    <div class="form-row">
+        <label for="node-input-disableLogging"><i class="fa fa-database"></i> Disable built-in logging</label>
+        <input type="checkbox" id="node-input-disableLogging" style="width:auto">
+        <span id="disable-logging-warning" style="display:none;color:#e67e22;font-size:11px;margin-left:6px;">
+            Warning: All metric history will be lost unless you pipe to an external sink.
+        </span>
+    </div>
+</script>
+
+<script type="text/javascript">
+    (function () {
+        var chk = document.getElementById('node-input-disableLogging');
+        var warn = document.getElementById('disable-logging-warning');
+        if (chk && warn) {
+            chk.addEventListener('change', function () {
+                warn.style.display = this.checked ? 'inline' : 'none';
+            });
+        }
+    })();
+</script>
+
+<script type="text/html" data-help-name="perf-monitor">
+    <p>Outputs live Node-RED process and system metrics as <code>msg.payload</code>.</p>
+
+    <h3>Outputs</h3>
+    <dl class="message-properties">
+        <dt>payload <span class="property-type">object</span></dt>
+        <dd>Metrics snapshot: <code>{ ts, process, system, nodes, container, source }</code></dd>
+        <dt>topic <span class="property-type">string</span></dt>
+        <dd><code>perf-monitor</code> for metrics, <code>perf-monitor:alarm</code> for anomaly alerts</dd>
+    </dl>
+
+    <h3>Details</h3>
+    <p><b>Mode:</b> Both = responds to inject AND emits on every sample interval.
+    Inject only = only responds to input messages.
+    Interval only = emits on every collector sample event.</p>
+
+    <p><b>Disable built-in logging:</b> Stops SQLite history writes. Use when piping metrics to an external system (InfluxDB, MQTT, etc.).</p>
+
+    <h3>Alarm pattern (downstream)</h3>
+    <pre>[inject] -&gt; [perf-monitor] -&gt; [switch: msg.payload.process.cpu &gt; 80] -&gt; [notify]</pre>
+</script>
