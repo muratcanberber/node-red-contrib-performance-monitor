@@ -1,6 +1,7 @@
 const path = require('path');
 const MetricsStore = require('./lib/metrics-store');
 const MetricsCollector = require('./lib/metrics-collector');
+const AnomalyDetector = require('./lib/anomaly-detector');
 const { registerRoutes } = require('./lib/http-routes');
 
 module.exports = function (RED) {
@@ -23,10 +24,14 @@ module.exports = function (RED) {
 
     registerRoutes({ RED, store, collector });
 
-    // Flow node — expose store and collector on RED for the node constructor
+    // Flow node
     RED._store = store;
     RED._collector = collector;
     require('./nodes/perf-monitor-node/perf-monitor-node')(RED);
+
+    // Anomaly detector
+    const detector = new AnomalyDetector({ store, collector, RED });
+    detector.start();
 
     const retentionTimer = setInterval(() => {
         try { store.runRetention(); } catch (_) {}
@@ -42,11 +47,12 @@ module.exports = function (RED) {
         RED.events.on('runtime-event', (ev) => {
             if (ev && ev.id === 'shutdown') {
                 clearInterval(retentionTimer);
+                detector.stop();
                 collector.stop();
                 store.close();
             }
         });
     }
 
-    module.exports._internal = { store, collector };
+    module.exports._internal = { store, collector, detector };
 };
