@@ -149,3 +149,45 @@ describe('AnomalyDetector — fixed threshold user rules', function () {
         detector.stop();
     });
 });
+
+describe('AnomalyDetector — statistical user rules', function () {
+    it('statistical rule fires when value exceeds mean + N*std for duration', function () {
+        const rule = { id: 2, metric: 'proc_cpu_pct', mode: 'statistical', threshold: 3, duration_s: 4, enabled: 1 };
+        const store = makeStore([rule]);
+        const collector = makeCollector();
+        const RED = makeRED();
+        const detector = new AnomalyDetector({ store, collector, RED });
+        detector.start();
+
+        const alarms = [];
+        collector.on('alarm', p => alarms.push(p));
+
+        // Build baseline: 30 samples at 10% CPU
+        emitSamples(store, detector, 30, { proc_cpu_pct: 10 });
+        // Now spike: mean≈10, std≈0, so mean+3σ ≈ 10 — very high value should breach
+        emitSamples(store, detector, 3, { proc_cpu_pct: 95 });
+
+        assert.strictEqual(alarms.length, 1, 'statistical rule must fire on spike');
+        assert.strictEqual(alarms[0].mode, 'statistical');
+        detector.stop();
+    });
+
+    it('statistical rule falls back to fixed when baseline has < 30 samples', function () {
+        const rule = { id: 3, metric: 'proc_cpu_pct', mode: 'statistical', threshold: 80, duration_s: 4, enabled: 1 };
+        const store = makeStore([rule]);
+        const collector = makeCollector();
+        const RED = makeRED();
+        const detector = new AnomalyDetector({ store, collector, RED });
+        detector.start();
+
+        const alarms = [];
+        collector.on('alarm', p => alarms.push(p));
+
+        // Only 5 baseline samples (< 30) then breach — falls back to fixed with threshold=80
+        emitSamples(store, detector, 5, { proc_cpu_pct: 50 });
+        emitSamples(store, detector, 3, { proc_cpu_pct: 90 }); // > 80 fixed threshold
+
+        assert.strictEqual(alarms.length, 1, 'fallback to fixed fires');
+        detector.stop();
+    });
+});
