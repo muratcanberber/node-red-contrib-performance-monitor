@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Performance Monitor — Report</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --nav-bg: #1f2833;
+    --nav-fg: #c5c6c7;
+    --accent: #45a29e;
+    --panel-bg: #f5f5f5;
+    --card-bg: #fff;
+    --border: #ddd;
+    --danger: #e74c3c;
+    --warn: #e67e22;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--panel-bg); color: #333; }
+
+  /* NAV */
+  nav { display: flex; align-items: center; gap: 16px; background: var(--nav-bg); color: var(--nav-fg); padding: 0 20px; height: 48px; }
+  nav .brand { font-weight: 600; font-size: 15px; flex: 1; }
+  .live-dot { width: 10px; height: 10px; border-radius: 50%; background: #4caf50; display: inline-block; margin-right: 6px; transition: background .3s; }
+  .live-dot.disconnected { background: #888; }
+  .live-label { font-size: 12px; }
+  nav select, nav button { background: #2e3d4e; color: #c5c6c7; border: 1px solid #3e5060; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+  nav button:hover { background: var(--accent); }
+  .custom-range { display: none; gap: 8px; align-items: center; }
+  .custom-range input { background: #2e3d4e; color: #c5c6c7; border: 1px solid #3e5060; padding: 3px 6px; border-radius: 4px; font-size: 12px; }
+
+  /* DEGRADED BANNER */
+  .degraded-banner { background: var(--warn); color: #fff; text-align: center; padding: 6px; font-size: 13px; display: none; }
+
+  /* KPI STRIP */
+  .kpi-strip { display: flex; gap: 12px; padding: 12px 20px; }
+  .kpi-card { flex: 1; background: var(--card-bg); border-radius: 6px; border: 1px solid var(--border); padding: 12px 16px; }
+  .kpi-card .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .5px; }
+  .kpi-card .value { font-size: 24px; font-weight: 600; margin-top: 4px; }
+  .kpi-card .delta { font-size: 12px; color: #888; }
+  .kpi-card.alarm-active { border-color: var(--danger); }
+  .kpi-card.alarm-active .value { color: var(--danger); }
+
+  /* CHARTS GRID */
+  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 20px 12px; }
+  .chart-card { background: var(--card-bg); border-radius: 6px; border: 1px solid var(--border); padding: 16px; }
+  .chart-card h3 { font-size: 13px; color: #555; margin-bottom: 10px; }
+  .chart-card canvas { max-height: 200px; }
+
+  /* TOP NODES TABLE */
+  .nodes-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .nodes-table th { text-align: left; color: #888; font-weight: 500; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+  .nodes-table td { padding: 4px 8px; border-bottom: 1px solid #f0f0f0; }
+  .nodes-empty { text-align: center; color: #aaa; padding: 20px; font-size: 13px; }
+
+  /* ANOMALY LOG */
+  .anomaly-section { padding: 0 20px 20px; }
+  .anomaly-section summary { cursor: pointer; font-size: 13px; font-weight: 600; color: #555; padding: 8px 0; user-select: none; }
+  .anomaly-list { background: var(--card-bg); border-radius: 6px; border: 1px solid var(--border); max-height: 200px; overflow-y: auto; }
+  .anomaly-entry { padding: 8px 14px; border-bottom: 1px solid #f0f0f0; font-size: 12px; }
+  .anomaly-entry:last-child { border-bottom: none; }
+  .anomaly-entry .severity { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; text-transform: uppercase; margin-right: 8px; }
+  .severity-high { background: #fde; color: var(--danger); }
+  .severity-critical { background: var(--danger); color: #fff; }
+  .severity-medium { background: #fef3e2; color: var(--warn); }
+  .severity-low { background: #e8f5e9; color: #388e3c; }
+  .anomaly-empty { text-align: center; color: #aaa; padding: 16px; font-size: 13px; }
+
+  /* ALARM PANEL */
+  .panel-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 100; }
+  .panel-backdrop.open { display: block; }
+  .alarm-panel { position: fixed; top: 0; right: 0; width: 380px; height: 100vh; background: var(--card-bg); box-shadow: -4px 0 20px rgba(0,0,0,.2); z-index: 101; display: flex; flex-direction: column; transform: translateX(100%); transition: transform .25s ease; }
+  .alarm-panel.open { transform: none; }
+  .alarm-panel header { background: var(--nav-bg); color: var(--nav-fg); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; }
+  .alarm-panel header h2 { font-size: 15px; }
+  .alarm-panel .close-btn { background: none; border: none; color: var(--nav-fg); font-size: 20px; cursor: pointer; line-height: 1; }
+  .alarm-panel .panel-body { flex: 1; overflow-y: auto; padding: 16px; }
+  .alarm-rule-item { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 5px; padding: 10px 12px; margin-bottom: 8px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; }
+  .alarm-rule-item .rule-desc { flex: 1; }
+  .alarm-rule-item .rule-actions { display: flex; gap: 6px; }
+  .btn-sm { padding: 3px 8px; border-radius: 4px; border: 1px solid; font-size: 11px; cursor: pointer; }
+  .btn-danger { border-color: var(--danger); color: var(--danger); background: none; }
+  .btn-danger:hover { background: var(--danger); color: #fff; }
+  .new-rule-form { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px; }
+  .new-rule-form h3 { font-size: 13px; color: #555; margin-bottom: 10px; }
+  .form-row { margin-bottom: 10px; }
+  .form-row label { display: block; font-size: 12px; color: #888; margin-bottom: 4px; }
+  .form-row select, .form-row input { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; }
+  .form-row .row2 { display: flex; gap: 8px; }
+  .form-row .row2 > * { flex: 1; }
+  .form-error { color: var(--danger); font-size: 12px; margin-top: 6px; display: none; }
+  .btn-primary { background: var(--accent); color: #fff; border: none; padding: 7px 14px; border-radius: 4px; font-size: 13px; cursor: pointer; width: 100%; margin-top: 4px; }
+  .btn-primary:hover { opacity: .9; }
+</style>
+</head>
+<body>
+
+<div class="degraded-banner" id="degradedBanner">Running in-memory mode — no historical data available</div>
+
+<nav>
+  <span class="brand">Performance Monitor</span>
+  <span class="live-dot" id="liveDot"></span>
+  <span class="live-label" id="liveLabel">LIVE</span>
+  <select id="timeRange">
+    <option value="3600">Last 1h</option>
+    <option value="21600" selected>Last 6h</option>
+    <option value="86400">Last 24h</option>
+    <option value="604800">Last 7d</option>
+    <option value="custom">Custom</option>
+  </select>
+  <span class="custom-range" id="customRange">
+    <input type="datetime-local" id="rangeFrom">
+    <span>→</span>
+    <input type="datetime-local" id="rangeTo">
+    <button onclick="loadRange()">Go</button>
+  </span>
+  <button onclick="openAlarmPanel()">⚙ Alarms</button>
+</nav>
+
+<!-- KPI STRIP -->
+<div class="kpi-strip">
+  <div class="kpi-card" id="kpiCpu"><div class="label">Process CPU</div><div class="value" id="kpiCpuVal">—</div><div class="delta" id="kpiCpuDelta"></div></div>
+  <div class="kpi-card" id="kpiHeap"><div class="label">Heap Used</div><div class="value" id="kpiHeapVal">—</div><div class="delta" id="kpiHeapDelta"></div></div>
+  <div class="kpi-card" id="kpiLag"><div class="label">Event Loop Lag</div><div class="value" id="kpiLagVal">—</div><div class="delta" id="kpiLagStatus"></div></div>
+  <div class="kpi-card" id="kpiAlarms"><div class="label">Active Alarms</div><div class="value" id="kpiAlarmsVal">0</div><div class="delta"></div></div>
+</div>
+
+<!-- CHARTS GRID -->
+<div class="charts-grid">
+  <div class="chart-card"><h3>CPU Usage</h3><canvas id="chartCpu"></canvas></div>
+  <div class="chart-card"><h3>Memory</h3><canvas id="chartMem"></canvas></div>
+  <div class="chart-card"><h3>Event Loop Lag</h3><canvas id="chartLag"></canvas></div>
+  <div class="chart-card">
+    <h3>Top Nodes</h3>
+    <table class="nodes-table" id="nodesTable">
+      <thead><tr><th>Node</th><th>Type</th><th>Msgs</th><th>Avg ms</th><th>Errors</th></tr></thead>
+      <tbody id="nodesBody"><tr><td colspan="5" class="nodes-empty">No data</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ANOMALY LOG -->
+<div class="anomaly-section">
+  <details open>
+    <summary>Anomaly Log (<span id="anomalyCount">0</span>)</summary>
+    <div class="anomaly-list" id="anomalyList">
+      <div class="anomaly-empty">No anomalies detected</div>
+    </div>
+  </details>
+</div>
+
+<!-- ALARM PANEL BACKDROP -->
+<div class="panel-backdrop" id="panelBackdrop" onclick="closeAlarmPanel()"></div>
+
+<!-- ALARM PANEL -->
+<div class="alarm-panel" id="alarmPanel">
+  <header>
+    <h2>Alarm Rules</h2>
+    <button class="close-btn" onclick="closeAlarmPanel()">×</button>
+  </header>
+  <div class="panel-body">
+    <div id="alarmRulesList"></div>
+
+    <div class="new-rule-form">
+      <h3>New Alarm Rule</h3>
+      <div class="form-row">
+        <label>Metric</label>
+        <select id="ruleMetric">
+          <option value="proc_cpu_pct">Process CPU %</option>
+          <option value="proc_heap_used">Heap Used (bytes)</option>
+          <option value="event_loop_lag">Event Loop Lag (ms)</option>
+          <option value="sys_cpu_pct">System CPU %</option>
+          <option value="sys_mem_used">System Memory Used</option>
+          <option value="disk_used">Disk Used</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Mode</label>
+        <select id="ruleMode">
+          <option value="fixed">Fixed threshold</option>
+          <option value="statistical">Statistical (auto-baseline)</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="row2">
+          <div>
+            <label>Threshold</label>
+            <input type="number" id="ruleThreshold" placeholder="e.g. 80">
+          </div>
+          <div>
+            <label>Duration (s)</label>
+            <input type="number" id="ruleDuration" placeholder="e.g. 30" min="1">
+          </div>
+        </div>
+      </div>
+      <div class="form-error" id="ruleError"></div>
+      <button class="btn-primary" onclick="saveAlarmRule()">Save Rule</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+const MAX_POINTS = 180;
+let sseSource = null;
+let activeAlarms = 0;
+let anomalies = [];
+let periodStart = null;
+
+// ── Chart helpers ─────────────────────────────────────────────────────────────
+function makeChart(id, label1, label2, color1, color2) {
+    const ctx = document.getElementById(id).getContext('2d');
+    const ds1 = { label: label1, data: [], borderColor: color1, backgroundColor: color1 + '22', tension: 0.2, pointRadius: 0, fill: true };
+    const datasets = [ds1];
+    if (label2) datasets.push({ label: label2, data: [], borderColor: color2, backgroundColor: color2 + '22', tension: 0.2, pointRadius: 0, fill: false });
+    return new Chart(ctx, {
+        type: 'line',
+        data: { labels: [], datasets },
+        options: {
+            animation: false, responsive: true, maintainAspectRatio: true,
+            scales: { x: { display: false }, y: { beginAtZero: true, ticks: { font: { size: 10 } } } },
+            plugins: { legend: { labels: { font: { size: 10 }, boxWidth: 12 } } }
+        }
+    });
+}
+
+const chartCpu = makeChart('chartCpu', 'Proc CPU%', 'Sys CPU%', '#e74c3c', '#e67e22');
+const chartMem = makeChart('chartMem', 'Heap MB', 'RSS MB', '#3498db', '#9b59b6');
+const chartLag = makeChart('chartLag', 'Loop Lag ms', null, '#2ecc71', null);
+
+function pushPoint(chart, label, ...values) {
+    chart.data.labels.push(label);
+    values.forEach((v, i) => chart.data.datasets[i].data.push(v));
+    if (chart.data.labels.length > MAX_POINTS) {
+        chart.data.labels.shift();
+        chart.data.datasets.forEach(ds => ds.data.shift());
+    }
+    chart.update('none');
+}
+
+// ── KPI helpers ───────────────────────────────────────────────────────────────
+function setKpi(sys) {
+    const cpu = sys.proc_cpu_pct != null ? sys.proc_cpu_pct.toFixed(1) + '%' : '—';
+    const heap = sys.proc_heap_used != null ? (sys.proc_heap_used / 1e6).toFixed(1) + ' MB' : '—';
+    const lag = sys.event_loop_lag != null ? sys.event_loop_lag.toFixed(1) + ' ms' : '—';
+    document.getElementById('kpiCpuVal').textContent = cpu;
+    document.getElementById('kpiHeapVal').textContent = heap;
+    document.getElementById('kpiLagVal').textContent = lag;
+    document.getElementById('kpiLagStatus').textContent = sys.event_loop_lag > 100 ? 'Elevated' : sys.event_loop_lag > 500 ? 'Critical' : 'OK';
+    if (!periodStart) periodStart = sys;
+    const cpuDelta = sys.proc_cpu_pct != null && periodStart.proc_cpu_pct != null ? (sys.proc_cpu_pct - periodStart.proc_cpu_pct).toFixed(1) : null;
+    if (cpuDelta !== null) document.getElementById('kpiCpuDelta').textContent = (cpuDelta >= 0 ? '+' : '') + cpuDelta + '% vs start';
+}
+
+function updateAlarmKpi() {
+    const el = document.getElementById('kpiAlarmsVal');
+    const card = document.getElementById('kpiAlarms');
+    el.textContent = activeAlarms;
+    card.classList.toggle('alarm-active', activeAlarms > 0);
+}
+
+// ── SSE ───────────────────────────────────────────────────────────────────────
+function connectSSE() {
+    if (sseSource) sseSource.close();
+    sseSource = new EventSource('/performance-monitor/stream');
+    sseSource.addEventListener('sample', (e) => {
+        try {
+            const d = JSON.parse(e.data);
+            const sys = d.system || d;
+            const ts = new Date(sys.ts || Date.now()).toLocaleTimeString();
+            setKpi(sys);
+            pushPoint(chartCpu, ts, sys.proc_cpu_pct, sys.sys_cpu_pct);
+            pushPoint(chartMem, ts, sys.proc_heap_used / 1e6, sys.proc_rss / 1e6);
+            pushPoint(chartLag, ts, sys.event_loop_lag);
+            if (d.nodes && d.nodes.length) updateNodesTable(d.nodes);
+        } catch (_) {}
+    });
+    sseSource.addEventListener('anomaly', (e) => {
+        try {
+            const a = JSON.parse(e.data);
+            addAnomaly(a);
+            activeAlarms++;
+            updateAlarmKpi();
+        } catch (_) {}
+    });
+    sseSource.onopen = () => setLive(true);
+    sseSource.onerror = () => {
+        setLive(false);
+        setTimeout(connectSSE, 5000);
+    };
+}
+
+function setLive(ok) {
+    document.getElementById('liveDot').classList.toggle('disconnected', !ok);
+    document.getElementById('liveLabel').textContent = ok ? 'LIVE' : 'DISCONNECTED';
+}
+
+// ── Historical data ───────────────────────────────────────────────────────────
+function getBucket(rangeS) {
+    if (rangeS <= 7200) return 10;
+    if (rangeS <= 86400) return 60;
+    return 600;
+}
+
+async function loadRange() {
+    const sel = document.getElementById('timeRange').value;
+    let from, to, bucket;
+    if (sel === 'custom') {
+        from = new Date(document.getElementById('rangeFrom').value).getTime();
+        to = new Date(document.getElementById('rangeTo').value).getTime();
+        if (!from || !to) return;
+        bucket = getBucket((to - from) / 1000);
+    } else {
+        to = Date.now();
+        from = to - parseInt(sel) * 1000;
+        bucket = getBucket(parseInt(sel));
+    }
+
+    try {
+        const r = await fetch(`/performance-monitor/range?from=${from}&to=${to}&bucket=${bucket}`);
+        if (!r.ok) return;
+        const rows = await r.json();
+        if (!rows || rows.length === 0) return;
+        // Reset charts
+        [chartCpu, chartMem, chartLag].forEach(c => {
+            c.data.labels = [];
+            c.data.datasets.forEach(ds => ds.data = []);
+        });
+        periodStart = null;
+        rows.forEach(row => {
+            const ts = new Date(row.ts).toLocaleTimeString();
+            setKpi(row);
+            pushPoint(chartCpu, ts, row.proc_cpu_pct, row.sys_cpu_pct);
+            pushPoint(chartMem, ts, row.proc_heap_used / 1e6, row.proc_rss / 1e6);
+            pushPoint(chartLag, ts, row.event_loop_lag);
+        });
+    } catch (_) {}
+}
+
+// ── Nodes table ───────────────────────────────────────────────────────────────
+function updateNodesTable(nodes) {
+    const tbody = document.getElementById('nodesBody');
+    if (!nodes || !nodes.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="nodes-empty">No node data</td></tr>';
+        return;
+    }
+    const sorted = nodes.slice().sort((a, b) => (b.msg_count || 0) - (a.msg_count || 0)).slice(0, 20);
+    tbody.innerHTML = sorted.map(n => `
+        <tr>
+            <td title="${n.node_id}">${n.node_id.slice(0,8)}…</td>
+            <td>${n.node_type || '—'}</td>
+            <td>${n.msg_count || 0}</td>
+            <td>${n.avg_process_ms != null ? n.avg_process_ms.toFixed(1) : '—'}</td>
+            <td>${n.error_count || 0}</td>
+        </tr>`).join('');
+}
+
+// ── Anomaly log ───────────────────────────────────────────────────────────────
+function addAnomaly(a) {
+    anomalies.unshift(a);
+    document.getElementById('anomalyCount').textContent = anomalies.length;
+    renderAnomalies();
+}
+
+function renderAnomalies() {
+    const list = document.getElementById('anomalyList');
+    if (!anomalies.length) {
+        list.innerHTML = '<div class="anomaly-empty">No anomalies detected</div>';
+        return;
+    }
+    list.innerHTML = anomalies.map(a => `
+        <div class="anomaly-entry">
+            <span class="severity severity-${a.severity}">${a.severity || 'info'}</span>
+            <strong>${a.metric}</strong> — ${a.message || a.pattern}
+            <span style="float:right;color:#aaa;font-size:11px">${new Date(a.ts).toLocaleTimeString()}</span>
+            ${a.deployNearby ? '<span style="color:var(--warn);font-size:11px"> ⚠ near deploy</span>' : ''}
+        </div>`).join('');
+}
+
+// ── Alarm rules panel ─────────────────────────────────────────────────────────
+async function loadAlarmRules() {
+    try {
+        const r = await fetch('/performance-monitor/alarm-rules');
+        if (!r.ok) return;
+        const rules = await r.json();
+        renderAlarmRules(rules);
+    } catch (_) {}
+}
+
+function renderAlarmRules(rules) {
+    const el = document.getElementById('alarmRulesList');
+    if (!rules.length) { el.innerHTML = '<p style="color:#aaa;font-size:13px">No alarm rules defined.</p>'; return; }
+    el.innerHTML = rules.map(r => `
+        <div class="alarm-rule-item" data-id="${r.id}">
+            <div class="rule-desc">
+                <strong>${r.metric}</strong> ${r.mode === 'fixed' ? '>' : '>'} ${r.threshold || '—'}
+                ${r.mode === 'statistical' ? 'σ' : ''} for ${r.duration_s}s
+                ${r.enabled ? '' : '<em style="color:#aaa"> (disabled)</em>'}
+            </div>
+            <div class="rule-actions">
+                <button class="btn-sm btn-danger" onclick="deleteRule(${r.id})">Delete</button>
+            </div>
+        </div>`).join('');
+}
+
+async function deleteRule(id) {
+    if (!confirm('Delete this alarm rule?')) return;
+    try {
+        await fetch('/performance-monitor/alarm-rules/' + id, { method: 'DELETE' });
+        loadAlarmRules();
+    } catch (_) {}
+}
+
+async function saveAlarmRule() {
+    const errEl = document.getElementById('ruleError');
+    errEl.style.display = 'none';
+    const metric = document.getElementById('ruleMetric').value;
+    const mode = document.getElementById('ruleMode').value;
+    const threshold = parseFloat(document.getElementById('ruleThreshold').value);
+    const duration_s = parseInt(document.getElementById('ruleDuration').value, 10);
+    if (!duration_s || duration_s < 1) {
+        errEl.textContent = 'Duration must be at least 1 second.';
+        errEl.style.display = 'block';
+        return;
+    }
+    try {
+        const r = await fetch('/performance-monitor/alarm-rules', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ metric, mode, threshold, duration_s, enabled: 1 })
+        });
+        if (!r.ok) {
+            const body = await r.json();
+            errEl.textContent = body.error || 'Save failed.';
+            errEl.style.display = 'block';
+            return;
+        }
+        document.getElementById('ruleThreshold').value = '';
+        document.getElementById('ruleDuration').value = '';
+        loadAlarmRules();
+    } catch (e) {
+        errEl.textContent = 'Network error.';
+        errEl.style.display = 'block';
+    }
+}
+
+function openAlarmPanel() {
+    document.getElementById('panelBackdrop').classList.add('open');
+    document.getElementById('alarmPanel').classList.add('open');
+    loadAlarmRules();
+}
+
+function closeAlarmPanel() {
+    document.getElementById('panelBackdrop').classList.remove('open');
+    document.getElementById('alarmPanel').classList.remove('open');
+}
+
+// ── Time range UI ─────────────────────────────────────────────────────────────
+document.getElementById('timeRange').addEventListener('change', function () {
+    const cr = document.getElementById('customRange');
+    cr.style.display = this.value === 'custom' ? 'flex' : 'none';
+    if (this.value !== 'custom') loadRange();
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+connectSSE();
+loadRange();
+</script>
+</body>
+</html>
