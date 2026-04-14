@@ -76,6 +76,37 @@ describe('MetricsStore', function () {
         const recent = store.getRecent(10);
         assert.strictEqual(recent.length, 0, 'sample row must not persist when node insert fails');
     });
+
+    it('setLoggingEnabled(false) skips DB writes but still emits sample', function () {
+        store.setLoggingEnabled(false);
+        const ts = Date.now();
+        const sys = {
+            ts, proc_cpu_pct: 10, proc_rss: 1000, proc_heap_used: 500, proc_heap_total: 800,
+            event_loop_lag: 1, sys_cpu_pct: 20, sys_mem_used: 2000, sys_mem_total: 8000,
+            disk_used: 100, disk_total: 1000, container: 0
+        };
+        let emitted = false;
+        store.once('sample', () => { emitted = true; });
+        store.flush({ system: sys, nodes: [] });
+        assert.strictEqual(emitted, true, 'sample event must fire even when logging disabled');
+        const rows = store.getRecent(10);
+        assert.strictEqual(rows.length, 0, 'no DB row when logging disabled');
+    });
+
+    it('setLoggingEnabled(true) restores DB writes', function () {
+        store.setLoggingEnabled(false);
+        store.setLoggingEnabled(true);
+        const ts = Date.now();
+        store.flush({
+            system: {
+                ts, proc_cpu_pct: 5, proc_rss: 100, proc_heap_used: 50, proc_heap_total: 80,
+                event_loop_lag: 0, sys_cpu_pct: 10, sys_mem_used: 1000, sys_mem_total: 4000,
+                disk_used: 10, disk_total: 100, container: 0
+            },
+            nodes: []
+        });
+        assert.strictEqual(store.getRecent(10).length, 1);
+    });
 });
 
 describe('MetricsStore read API', function () {
