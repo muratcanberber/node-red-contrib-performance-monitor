@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-04-14
+
+### Added
+- SQLite-backed metrics persistence (`performance-monitor.db` in Node-RED user dir).
+- Per-node instrumentation via `RED.hooks` (msg count, avg process time, errors).
+- Live SSE stream at `GET /performance-monitor/stream`.
+- Historical query endpoints (`/recent`, `/range`, `/summary`).
+- Retention + max-DB-size controls in settings UI.
+- Deploy/stop lifecycle markers recorded for future anomaly analysis.
+
+### Changed
+- **BREAKING**: now requires Node-RED ≥ 1.1.0 (hooks API).
+- **BREAKING**: drops "zero native dependencies" claim — adds `better-sqlite3` (ships prebuilt binaries).
+- Code reorganized into `lib/` modules (internal change).
+
+### Migration
+- First launch post-upgrade creates a fresh `performance-monitor.db`. No user action required.
+
+---
+
 ## [1.2.0] - 2026-02-06 - Docker Container Support
 
 ### 🐳 Container Compatibility

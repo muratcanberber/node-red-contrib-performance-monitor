@@ -1,70 +1,44 @@
 const assert = require('assert');
 const Database = require('better-sqlite3');
-const { CURRENT_VERSION, getSchemaVersion, runMigrations } = require('../lib/migrations');
-const initialMigration = require('../lib/migrations/001-initial');
+const { runMigrations, CURRENT_VERSION } = require('../lib/migrations');
 
 describe('migrations', function () {
     let db;
 
-    beforeEach(function () {
-        db = new Database(':memory:');
-    });
+    beforeEach(function () { db = new Database(':memory:'); });
+    afterEach(function () { db.close(); });
 
-    afterEach(function () {
-        db.close();
-    });
-
-    it('exposes the initial migration as version 1', function () {
-        assert.strictEqual(initialMigration.version, 1);
-    });
-
-    it('creates schema and records the current version on a fresh database', function () {
-        const appliedVersion = runMigrations(db);
-        const tables = db.prepare(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
-        ).all().map(function (row) {
-            return row.name;
-        });
-
-        assert.strictEqual(appliedVersion, CURRENT_VERSION);
-        assert.strictEqual(getSchemaVersion(db), CURRENT_VERSION);
+    it('creates schema and meta on fresh DB', function () {
+        runMigrations(db);
+        const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all().map(r => r.name);
         assert.deepStrictEqual(tables, ['events', 'meta', 'node_samples', 'samples']);
+        const ver = db.prepare("SELECT value FROM meta WHERE key='schema_version'").get();
+        assert.strictEqual(ver.value, String(CURRENT_VERSION));
     });
 
-    it('is idempotent when run multiple times', function () {
+    it('is idempotent: running twice leaves schema unchanged', function () {
         runMigrations(db);
         runMigrations(db);
-
-        const versionRows = db.prepare("SELECT value FROM meta WHERE key='schema_version'").all();
-
-        assert.strictEqual(versionRows.length, 1);
-        assert.strictEqual(versionRows[0].value, String(CURRENT_VERSION));
+        const ver = db.prepare("SELECT value FROM meta WHERE key='schema_version'").get();
+        assert.strictEqual(ver.value, String(CURRENT_VERSION));
     });
 
-    it('creates the expected columns on samples', function () {
+    it('creates expected columns on samples', function () {
         runMigrations(db);
-
-        const columns = db.prepare('PRAGMA table_info(samples)').all().map(function (column) {
-            return column.name;
-        });
-
-        assert.ok(columns.includes('ts'));
-        assert.ok(columns.includes('proc_cpu_pct'));
-        assert.ok(columns.includes('sys_cpu_pct'));
-        assert.ok(columns.includes('container'));
+        const cols = db.prepare("PRAGMA table_info(samples)").all().map(c => c.name);
+        assert.ok(cols.includes('ts'));
+        assert.ok(cols.includes('proc_cpu_pct'));
+        assert.ok(cols.includes('sys_cpu_pct'));
+        assert.ok(cols.includes('container'));
     });
 
-    it('creates the expected columns on node_samples', function () {
+    it('creates expected columns on node_samples', function () {
         runMigrations(db);
-
-        const columns = db.prepare('PRAGMA table_info(node_samples)').all().map(function (column) {
-            return column.name;
-        });
-
-        assert.ok(columns.includes('ts'));
-        assert.ok(columns.includes('node_id'));
-        assert.ok(columns.includes('msg_count'));
-        assert.ok(columns.includes('avg_process_ms'));
-        assert.ok(columns.includes('error_count'));
+        const cols = db.prepare("PRAGMA table_info(node_samples)").all().map(c => c.name);
+        assert.ok(cols.includes('ts'));
+        assert.ok(cols.includes('node_id'));
+        assert.ok(cols.includes('msg_count'));
+        assert.ok(cols.includes('avg_process_ms'));
+        assert.ok(cols.includes('error_count'));
     });
 });

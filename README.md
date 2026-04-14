@@ -4,10 +4,10 @@
 
 A powerful, native **Performance Monitor** sidebar for Node-RED. It provides real-time visibility into your Node-RED instance's health and system resources with a beautiful, integrated design.
 
-**v1.1.0 - The Precision & UI Update**
-- 🚀 **Zero Dependencies** (No binary compilation required)
+**v2.0.0 - The Persistence Update**
 - 🖥️ **Cross-Platform** (macOS, Windows, Linux, Alpine, Raspberry Pi)
 - 🎨 **Component-Level Theming** (Matches your Node-RED theme)
+- 🗄️ **SQLite-Backed History** (Configurable retention, queryable over HTTP)
 
 ---
 
@@ -19,6 +19,7 @@ Monitor key metrics with sub-second precision:
 - **Memory**: Detailed heap and RSS tracking to spot leaks.
 - **Event Loop Lag**: Millisecond-level latency detection.
 - **System Hardware**: Full system CPU, RAM, and Disk usage with live sparkline history.
+- **Historical metrics**: SQLite-backed history with configurable retention (default 7 days).
 
 ### 📐 Smart Sidebar
 The sidebar is designed for efficiency.
@@ -67,6 +68,8 @@ Access settings by clicking the **Settings** button in the sidebar toolbar.
 - **Refresh Rate**: Adjust polling interval (default: 2s).
 - **HUD Widget**: Toggle the top header widget visibility.
 - **Theme Selection**: Choose your preferred visual style.
+- **History Retention**: Number of days of metrics to keep (default: 7).
+- **Max DB size**: Maximum size for the SQLite database in MB (default: 500).
 
 ## 🤝 License
 MIT
