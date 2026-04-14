@@ -23,6 +23,11 @@ module.exports = function (RED) {
 
     registerRoutes({ RED, store, collector });
 
+    // Flow node — expose store and collector on RED for the node constructor
+    RED._store = store;
+    RED._collector = collector;
+    require('./nodes/perf-monitor-node/perf-monitor-node')(RED);
+
     const retentionTimer = setInterval(() => {
         try { store.runRetention(); } catch (_) {}
     }, 60 * 60 * 1000);
