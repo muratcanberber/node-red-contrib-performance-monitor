@@ -18,7 +18,9 @@ const RED = {
     },
     httpAdmin: {
         get: sinon.stub(),
-        post: sinon.stub()
+        post: sinon.stub(),
+        put: sinon.stub(),
+        delete: sinon.stub()
     },
     plugins: {
         registerPlugin: sinon.stub()
@@ -56,6 +58,8 @@ describe('Performance Monitor', function () {
         RED.log.error.reset();
         RED.httpAdmin.get.reset();
         RED.httpAdmin.post.reset();
+        RED.httpAdmin.put.reset();
+        RED.httpAdmin.delete.reset();
         RED.plugins.registerPlugin.reset();
 
         delete require.cache[require.resolve('../lib/container-detect.js')];
