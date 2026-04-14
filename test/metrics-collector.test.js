@@ -42,9 +42,9 @@ describe('MetricsCollector per-node hooks', function () {
         collector.stop();
     });
 
-    it('registers preRoute and postRoute hooks', function () {
+    it('registers preRoute and postDeliver hooks', function () {
         assert.ok(typeof hooks.preRoute === 'function');
-        assert.ok(typeof hooks.postRoute === 'function');
+        assert.ok(typeof hooks.postDeliver === 'function');
     });
 
     it('aggregates msg count and avg process time per node', function () {
@@ -53,7 +53,7 @@ describe('MetricsCollector per-node hooks', function () {
         hooks.preRoute(sendEvents);
         const start = Date.now();
         while (Date.now() - start < 2) {}
-        hooks.postRoute(sendEvents);
+        hooks.postDeliver(sendEvents);
 
         const snap = collector.drainNodes();
         assert.strictEqual(snap.length, 1);
@@ -65,14 +65,14 @@ describe('MetricsCollector per-node hooks', function () {
     it('drainNodes resets counters', function () {
         const sendEvents = { source: { node: { id: 'n2', type: 'inject' } }, msg: { _msgid: 'x' } };
         hooks.preRoute(sendEvents);
-        hooks.postRoute(sendEvents);
+        hooks.postDeliver(sendEvents);
         collector.drainNodes();
         const snap2 = collector.drainNodes();
         assert.strictEqual(snap2.length, 0);
     });
 
     it('one hook throw does not crash tick', function () {
-        assert.doesNotThrow(() => hooks.postRoute({ source: null, msg: null }));
+        assert.doesNotThrow(() => hooks.postDeliver({ source: null, msg: null }));
     });
 });
 
