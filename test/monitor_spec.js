@@ -25,6 +25,15 @@ const RED = {
     },
     nodes: {
         registerType: sinon.stub()
+    },
+    settings: {
+        userDir: os.tmpdir()
+    },
+    hooks: {
+        add: sinon.stub()
+    },
+    events: {
+        on: sinon.stub()
     }
 };
 
@@ -60,8 +69,9 @@ describe('Performance Monitor', function () {
     });
 
     afterEach(function () {
-        if (monitorModule && monitorModule._internal && monitorModule._internal.stopLagMeasurement) {
-            monitorModule._internal.stopLagMeasurement();
+        if (monitorModule && monitorModule._internal) {
+            try { monitorModule._internal.collector.stop(); } catch (_) {}
+            try { monitorModule._internal.store.close(); } catch (_) {}
         }
         sandbox.restore();
         // Restore original process functions
@@ -71,30 +81,25 @@ describe('Performance Monitor', function () {
     });
 
     describe('Plugin Registration', function () {
-        it('should register as a sidebar plugin', function () {
+        it('should register the plugin', function () {
             assert(RED.plugins.registerPlugin.calledOnce);
             const call = RED.plugins.registerPlugin.getCall(0);
             assert.strictEqual(call.args[0], 'performance-monitor');
-            assert.strictEqual(call.args[1].type, 'sidebar');
+            assert.strictEqual(call.args[1].type, 'performance-monitor');
         });
 
-        it('should log plugin loaded message', function () {
-            // The onadd function is called during registration
+        it('should log plugin loaded message on onadd', function () {
             const pluginConfig = RED.plugins.registerPlugin.getCall(0).args[1];
             pluginConfig.onadd();
-
-            assert(RED.log.info.calledWith('Performance Monitor plugin loaded (v1.1.0 - Precision & UI Update)'));
+            assert(RED.log.info.calledWith('[perf-monitor] plugin loaded'));
         });
 
         it('should register HTTP endpoints', function () {
-            const pluginConfig = RED.plugins.registerPlugin.getCall(0).args[1];
-            pluginConfig.onadd();
-
-            // Should register 4 endpoints: stats (get), settings (get), settings (post), sidebar (get)
-            assert(RED.httpAdmin.get.calledWith('/performance-monitor/stats'));
+            // Routes are registered during module init, not in onadd
+            assert(RED.httpAdmin.get.calledWith('/performance-monitor/recent'));
             assert(RED.httpAdmin.get.calledWith('/performance-monitor/settings'));
             assert(RED.httpAdmin.post.calledWith('/performance-monitor/settings'));
-            assert(RED.httpAdmin.get.calledWith('/performance-monitor/sidebar'));
+            assert(RED.httpAdmin.get.calledWith('/performance-monitor/stream'));
         });
     });
 
@@ -540,27 +545,17 @@ describe('Performance Monitor', function () {
     });
 
     describe('Settings API', function () {
-        it('should return default settings', function () {
-            const pluginConfig = RED.plugins.registerPlugin.getCall(0).args[1];
-            pluginConfig.onadd();
-
-            // Find the settings GET handler
+        it('should return default settings endpoint', function () {
             const settingsHandler = RED.httpAdmin.get.getCalls().find(
                 call => call.args[0] === '/performance-monitor/settings'
             );
-
-            assert(settingsHandler, 'Settings endpoint should be registered');
+            assert(settingsHandler, 'Settings GET endpoint should be registered');
         });
 
         it('should update settings via POST', function () {
-            const pluginConfig = RED.plugins.registerPlugin.getCall(0).args[1];
-            pluginConfig.onadd();
-
-            // Find the settings POST handler
             const settingsHandler = RED.httpAdmin.post.getCalls().find(
                 call => call.args[0] === '/performance-monitor/settings'
             );
-
             assert(settingsHandler, 'Settings POST endpoint should be registered');
         });
     });
