@@ -208,6 +208,11 @@ let activeAlarms = 0;
 let anomalies = [];
 let periodStart = null;
 
+// ── HTML Escape helper ─────────────────────────────────────────────────────────
+function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 // ── Chart helpers ─────────────────────────────────────────────────────────────
 function makeChart(id, label1, label2, color1, color2) {
     const ctx = document.getElementById(id).getContext('2d');
@@ -371,8 +376,8 @@ function renderAnomalies() {
     }
     list.innerHTML = anomalies.map(a => `
         <div class="anomaly-entry">
-            <span class="severity severity-${a.severity}">${a.severity || 'info'}</span>
-            <strong>${a.metric}</strong> — ${a.message || a.pattern}
+            <span class="severity severity-${escHtml(a.severity)}">${escHtml(a.severity || 'info')}</span>
+            <strong>${escHtml(a.metric)}</strong> — ${escHtml(a.message || a.pattern)}
             <span style="float:right;color:#aaa;font-size:11px">${new Date(a.ts).toLocaleTimeString()}</span>
             ${a.deployNearby ? '<span style="color:var(--warn);font-size:11px"> ⚠ near deploy</span>' : ''}
         </div>`).join('');
