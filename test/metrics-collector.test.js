@@ -94,3 +94,16 @@ describe('MetricsCollector lifecycle events', function () {
         handlers['flows:started']({ config: {} });
     });
 });
+
+describe('MetricsCollector.emitAlarm', function () {
+    it('emitAlarm fires alarm event with payload', function (done) {
+        const collector = new MetricsCollector({});
+        const payload = { ts: Date.now(), kind: 'anomaly', pattern: 'cpu_spike', metric: 'proc_cpu_pct', value: 95 };
+        collector.once('alarm', (p) => {
+            assert.deepStrictEqual(p, payload);
+            collector.stop();
+            done();
+        });
+        collector.emitAlarm(payload);
+    });
+});
