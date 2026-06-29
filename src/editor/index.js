@@ -1,4 +1,5 @@
 import css from './styles.css';
+import { buildSidebar } from './sidebar/sidebar';
 
 (function () {
   'use strict';
@@ -6,22 +7,25 @@ import css from './styles.css';
   styleEl.textContent = css;
   document.head.appendChild(styleEl);
 
-  function content() {
-    const el = document.createElement('div');
-    el.className = 'pm-root';
-    el.textContent = 'Performance Monitor';
-    return el;
-  }
+  const { el: sidebarEl, start, stop } = buildSidebar();
 
   RED.plugins.registerPlugin('performance-monitor', {
     type: 'performance-monitor',
     onadd() { /* no-op */ },
   });
 
-  RED.sidebar.addTab({
+  const tab = RED.sidebar.addTab({
     id: 'performance-monitor',
     name: 'Performance Monitor',
     iconClass: 'fa fa-tachometer',
-    content: content(),
+    content: sidebarEl,
   });
+
+  // Start polling immediately; it will run as long as the page is open.
+  // Note: RED.sidebar.addTab does not expose a visibility change API in Node-RED 5,
+  // so we keep polling continuously. This is the simplest working approach.
+  start();
+
+  // Optional: if the tab object later exposes onchange/onshow, we can wire it here.
+  // For now, polling runs continuously (acceptable for a monitoring tool).
 })();

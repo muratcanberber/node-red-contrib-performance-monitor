@@ -1,5 +1,75 @@
 .pm-root { padding: 8px; color: var(--red-ui-primary-text-color, #333); font-size: 12px; }
 
+/* Sidebar container */
+.pm-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  color: var(--red-ui-primary-text-color);
+  font-size: 12px;
+}
+
+/* Toolbar at top */
+.pm-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);
+  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));
+  flex-shrink: 0;
+}
+
+/* Toolbar buttons */
+.pm-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: var(--red-ui-secondary-text-color);
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color 0.15s ease;
+}
+
+.pm-toolbar-btn:hover {
+  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.05));
+}
+
+.pm-toolbar-btn:active {
+  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.1));
+}
+
+.pm-toolbar-btn.pm-paused {
+  color: var(--red-ui-text-color-warning, #ff9800);
+}
+
+/* Status indicator */
+.pm-status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  letter-spacing: 0.05em;
+}
+
+.pm-status-online {
+  color: var(--red-ui-text-color-success, #3a3);
+  background: var(--red-ui-text-color-success, rgba(51, 170, 51, 0.1));
+}
+
+.pm-status-offline {
+  color: var(--red-ui-text-color-error, #c33);
+  background: var(--red-ui-text-color-error, rgba(204, 51, 51, 0.1));
+}
+
 /* Metric row structure */
 .pm-row {
   position: relative;
@@ -127,7 +197,7 @@
   display: inline-block;
 }
 
-/* Group headers (for future use in list context) */
+/* Group headers */
 .pm-group-head {
   font-size: 11px;
   text-transform: uppercase;
@@ -135,4 +205,16 @@
   color: var(--red-ui-tertiary-text-color);
   padding: 6px 8px 2px;
   font-weight: 600;
+  margin-top: 8px;
+}
+
+.pm-group-head:first-child {
+  margin-top: 0;
+}
+
+/* Group container */
+.pm-group {
+  border: 1px solid var(--red-ui-tertiary-border-color, #eee);
+  border-radius: 2px;
+  overflow: hidden;
 }

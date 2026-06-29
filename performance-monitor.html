@@ -1,32 +1,541 @@
 <!-- Performance Monitor — built from src/editor/ by build/build.mjs. DO NOT EDIT BY HAND. -->
 <script type="text/javascript">
 (() => {
+  var __create = Object.create;
+  var __defProp = Object.defineProperty;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __getProtoOf = Object.getPrototypeOf;
+  var __hasOwnProp = Object.prototype.hasOwnProperty;
+  var __commonJS = (cb, mod) => function __require() {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  };
+  var __copyProps = (to, from, except, desc) => {
+    if (from && typeof from === "object" || typeof from === "function") {
+      for (let key of __getOwnPropNames(from))
+        if (!__hasOwnProp.call(to, key) && key !== except)
+          __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+    }
+    return to;
+  };
+  var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+    // If the importer is in node compatibility mode or this is not an ESM
+    // file that has been converted to a CommonJS file using a Babel-
+    // compatible transform (i.e. "__esModule" has not been set), then set
+    // "default" to the CommonJS "module.exports" for node compatibility.
+    isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+    mod
+  ));
+
+  // src/editor/format.js
+  var require_format = __commonJS({
+    "src/editor/format.js"(exports, module) {
+      "use strict";
+      function formatBytes(bytes, decimals = 1) {
+        if (!bytes) return "0 B";
+        const k = 1024;
+        const sizes = ["B", "KB", "MB", "GB", "TB"];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(decimals)) + " " + sizes[i];
+      }
+      function formatUptime(seconds) {
+        const d = Math.floor(seconds / 86400);
+        const h = Math.floor(seconds % 86400 / 3600);
+        const m = Math.floor(seconds % 3600 / 60);
+        if (d > 0) return `${d}d ${h}h ${m}m`;
+        if (h > 0) return `${h}h ${m}m`;
+        return `${m}m`;
+      }
+      function statusClass(pct) {
+        return pct < 70 ? "pm-ok" : pct < 90 ? "pm-warn" : "pm-crit";
+      }
+      function lagStatusClass(ms) {
+        return ms < 10 ? "pm-ok" : ms < 50 ? "pm-warn" : "pm-crit";
+      }
+      module.exports = { formatBytes, formatUptime, statusClass, lagStatusClass };
+    }
+  });
+
+  // src/editor/sidebar/sections.js
+  var require_sections = __commonJS({
+    "src/editor/sidebar/sections.js"(exports, module) {
+      "use strict";
+      var { formatBytes, formatUptime, statusClass, lagStatusClass } = require_format();
+      var SECTIONS = [
+        // App group
+        {
+          id: "app-info",
+          group: "app",
+          label: "App Info",
+          icon: "fa-info-circle",
+          value: (stats) => {
+            const pid = stats.nodeRed.pid || "N/A";
+            const uptime = stats.nodeRed.uptime ? formatUptime(stats.nodeRed.uptime) : "N/A";
+            return `PID ${pid} \u2022 ${uptime}`;
+          },
+          percent: () => null,
+          sparkKey: null,
+          detail: (stats) => [
+            { label: "PID", value: String(stats.nodeRed.pid || "N/A") },
+            { label: "Uptime", value: stats.nodeRed.uptime ? formatUptime(stats.nodeRed.uptime) : "N/A" },
+            { label: "Platform", value: process.platform || "N/A" }
+          ]
+        },
+        {
+          id: "app-cpu",
+          group: "app",
+          label: "Node-RED CPU",
+          icon: "fa-microchip",
+          value: (stats) => {
+            const cpu = stats.nodeRed.cpu || 0;
+            return `${cpu.toFixed(1)}%`;
+          },
+          percent: (stats) => stats.nodeRed.cpu || 0,
+          sparkKey: "cpu",
+          detail: (stats) => [
+            { label: "CPU", value: `${(stats.nodeRed.cpu || 0).toFixed(1)}%` }
+          ]
+        },
+        {
+          id: "app-memory",
+          group: "app",
+          label: "Node-RED Memory",
+          icon: "fa-memory",
+          value: (stats) => {
+            const heapUsed = stats.nodeRed.memory?.heapUsed || 0;
+            const heapTotal = stats.nodeRed.memory?.heapTotal || 0;
+            return `${formatBytes(heapUsed)} / ${formatBytes(heapTotal)}`;
+          },
+          percent: (stats) => {
+            const heapUsed = stats.nodeRed.memory?.heapUsed || 0;
+            const heapTotal = stats.nodeRed.memory?.heapTotal || 1;
+            return heapUsed / heapTotal * 100;
+          },
+          sparkKey: "memory",
+          detail: (stats) => {
+            const mem = stats.nodeRed.memory || {};
+            return [
+              { label: "Heap Used", value: formatBytes(mem.heapUsed || 0) },
+              { label: "Heap Total", value: formatBytes(mem.heapTotal || 0) },
+              { label: "RSS", value: formatBytes(mem.rss || 0) },
+              { label: "External", value: formatBytes(mem.external || 0) },
+              { label: "Array Buffers", value: formatBytes(mem.arrayBuffers || 0) }
+            ];
+          }
+        },
+        {
+          id: "app-lag",
+          group: "app",
+          label: "Event Loop Lag",
+          icon: "fa-hourglass-half",
+          value: (stats) => {
+            const lag = stats.nodeRed.eventLoopLag || 0;
+            return `${lag.toFixed(2)}ms`;
+          },
+          percent: () => null,
+          sparkKey: "lag",
+          detail: (stats) => [
+            { label: "Lag", value: `${(stats.nodeRed.eventLoopLag || 0).toFixed(2)}ms` }
+          ]
+        },
+        // System group
+        {
+          id: "sys-cpu",
+          group: "sys",
+          label: "System CPU",
+          icon: "fa-processor",
+          value: (stats) => {
+            const cpu = stats.system.cpu?.percent || 0;
+            const cores = stats.system.cpu?.cores || 1;
+            return `${cpu.toFixed(1)}% (${cores} cores)`;
+          },
+          percent: (stats) => stats.system.cpu?.percent || 0,
+          sparkKey: "sysCpu",
+          detail: (stats) => {
+            const cpu = stats.system.cpu || {};
+            return [
+              { label: "Usage", value: `${(cpu.percent || 0).toFixed(1)}%` },
+              { label: "Cores", value: String(cpu.cores || "N/A") },
+              { label: "Model", value: cpu.model || "N/A" }
+            ];
+          }
+        },
+        {
+          id: "sys-memory",
+          group: "sys",
+          label: "System Memory",
+          icon: "fa-memory",
+          value: (stats) => {
+            const used = stats.system.memory?.used || 0;
+            const total = stats.system.memory?.total || 0;
+            return `${formatBytes(used)} / ${formatBytes(total)}`;
+          },
+          percent: (stats) => stats.system.memory?.usedPercent || 0,
+          sparkKey: "sysMemory",
+          detail: (stats) => {
+            const mem = stats.system.memory || {};
+            return [
+              { label: "Used", value: formatBytes(mem.used || 0) },
+              { label: "Total", value: formatBytes(mem.total || 0) },
+              { label: "Free", value: formatBytes(mem.free || 0) }
+            ];
+          }
+        },
+        {
+          id: "sys-disk",
+          group: "sys",
+          label: "Disk Space",
+          icon: "fa-hdd",
+          value: (stats) => {
+            const used = stats.system.disk?.used || 0;
+            const total = stats.system.disk?.total || 0;
+            return `${formatBytes(used)} / ${formatBytes(total)}`;
+          },
+          percent: (stats) => stats.system.disk?.usedPercent || 0,
+          sparkKey: "sysDisk",
+          detail: (stats) => {
+            const disk = stats.system.disk || {};
+            return [
+              { label: "Used", value: formatBytes(disk.used || 0) },
+              { label: "Total", value: formatBytes(disk.total || 0) },
+              { label: "Free", value: formatBytes(disk.free || 0) }
+            ];
+          }
+        },
+        {
+          id: "sys-info",
+          group: "sys",
+          label: "System Info",
+          icon: "fa-server",
+          value: (stats) => {
+            const model = stats.system.cpu?.model || "Unknown";
+            const cores = stats.system.cpu?.cores || "N/A";
+            return `${model} (${cores} cores)`;
+          },
+          percent: () => null,
+          sparkKey: null,
+          detail: (stats) => {
+            const cpu = stats.system.cpu || {};
+            const mem = stats.system.memory || {};
+            return [
+              { label: "CPU Model", value: cpu.model || "N/A" },
+              { label: "Cores", value: String(cpu.cores || "N/A") },
+              { label: "Total Memory", value: formatBytes(mem.total || 0) }
+            ];
+          }
+        }
+      ];
+      module.exports = { SECTIONS };
+    }
+  });
+
+  // src/editor/sparkline.js
+  var require_sparkline = __commonJS({
+    "src/editor/sparkline.js"(exports, module) {
+      "use strict";
+      function sparkline(points, opts = {}) {
+        const width = opts.width || 120;
+        const height = opts.height || 18;
+        const colorVar = opts.colorVar || "--red-ui-text-color-link";
+        if (!points || points.length === 0) {
+          return `<svg width="${width}" height="${height}" class="pm-spark" aria-hidden="true"></svg>`;
+        }
+        const max = Math.max(...points, 1);
+        const step = points.length > 1 ? width / (points.length - 1) : 0;
+        const pts = points.map((v, i) => `${(i * step).toFixed(1)},${(height - v / max * height).toFixed(1)}`).join(" ");
+        return `<svg width="${width}" height="${height}" class="pm-spark" aria-hidden="true" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="var(${colorVar})" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
+      }
+      module.exports = { sparkline };
+    }
+  });
+
+  // src/editor/ring-buffer.js
+  var require_ring_buffer = __commonJS({
+    "src/editor/ring-buffer.js"(exports, module) {
+      "use strict";
+      var RingBuffer = class {
+        constructor(size) {
+          this._size = size;
+          this._buf = [];
+        }
+        push(v) {
+          this._buf.push(v);
+          if (this._buf.length > this._size) this._buf.shift();
+        }
+        values() {
+          return this._buf.slice();
+        }
+      };
+      module.exports = RingBuffer;
+    }
+  });
+
+  // src/editor/sidebar/metric-row.js
+  var require_metric_row = __commonJS({
+    "src/editor/sidebar/metric-row.js"(exports, module) {
+      "use strict";
+      var { statusClass, lagStatusClass } = require_format();
+      var { sparkline } = require_sparkline();
+      var RingBuffer = require_ring_buffer();
+      function metricRow(section) {
+        const detailId = `${section.id}-detail`;
+        const ringBuffer = new RingBuffer(120);
+        const el = document.createElement("div");
+        el.className = "pm-row";
+        const head = document.createElement("button");
+        head.className = "pm-row-head";
+        head.setAttribute("aria-expanded", "false");
+        head.setAttribute("aria-controls", detailId);
+        const icon = document.createElement("i");
+        icon.className = `fa ${section.icon}`;
+        icon.setAttribute("aria-hidden", "true");
+        head.appendChild(icon);
+        const label = document.createElement("span");
+        label.className = "pm-label";
+        label.textContent = section.label;
+        head.appendChild(label);
+        const value = document.createElement("span");
+        value.className = "pm-value";
+        value.textContent = "\u2014";
+        head.appendChild(value);
+        el.appendChild(head);
+        const fill = document.createElement("div");
+        fill.className = "pm-fill";
+        el.appendChild(fill);
+        const detail = document.createElement("div");
+        detail.className = "pm-detail";
+        detail.id = detailId;
+        const detailContent = document.createElement("div");
+        detailContent.className = "pm-detail-content";
+        detail.appendChild(detailContent);
+        el.appendChild(detail);
+        head.addEventListener("click", () => {
+          const isOpen = el.classList.contains("pm-open");
+          if (isOpen) {
+            el.classList.remove("pm-open");
+            head.setAttribute("aria-expanded", "false");
+          } else {
+            el.classList.add("pm-open");
+            head.setAttribute("aria-expanded", "true");
+          }
+        });
+        function update(stats) {
+          const newValue = section.value(stats);
+          value.textContent = newValue;
+          const pct = section.percent(stats);
+          if (pct !== null && pct !== void 0) {
+            let statusCls;
+            if (section.id === "app-lag") {
+              const lagMs = stats.nodeRed.eventLoopLag || 0;
+              statusCls = lagStatusClass(lagMs);
+              ringBuffer.push(lagMs);
+            } else {
+              statusCls = statusClass(pct);
+              ringBuffer.push(pct);
+            }
+            const clampedPct = Math.max(0, Math.min(100, pct));
+            fill.style.width = `${clampedPct}%`;
+            fill.classList.remove("pm-ok", "pm-warn", "pm-crit");
+            fill.classList.add(statusCls);
+          } else {
+            fill.style.width = "0%";
+            fill.classList.remove("pm-ok", "pm-warn", "pm-crit");
+          }
+          const detailRows = section.detail(stats);
+          detailContent.innerHTML = "";
+          if (detailRows && detailRows.length > 0) {
+            const grid = document.createElement("div");
+            grid.className = "pm-detail-grid";
+            detailRows.forEach((row) => {
+              const labelEl = document.createElement("div");
+              labelEl.className = "pm-detail-label";
+              labelEl.textContent = row.label;
+              grid.appendChild(labelEl);
+              const valueEl = document.createElement("div");
+              valueEl.className = "pm-detail-value";
+              valueEl.textContent = row.value;
+              grid.appendChild(valueEl);
+            });
+            detailContent.appendChild(grid);
+          }
+          if (section.sparkKey && ringBuffer.values().length > 0) {
+            const svg = sparkline(ringBuffer.values(), { width: 100, height: 16 });
+            const sparkContainer = document.createElement("div");
+            sparkContainer.className = "pm-sparkline-container";
+            sparkContainer.innerHTML = svg;
+            detailContent.appendChild(sparkContainer);
+          }
+        }
+        return { el, update };
+      }
+      module.exports = { metricRow };
+    }
+  });
+
+  // src/editor/api.js
+  var require_api = __commonJS({
+    "src/editor/api.js"(exports, module) {
+      "use strict";
+      function admin(path) {
+        return (RED.settings.apiRootUrl || "") + path;
+      }
+      function getJSON(path) {
+        return new Promise((resolve, reject) => {
+          $.ajax({ url: admin(path), dataType: "json", success: resolve, error: (xhr) => reject(new Error("HTTP " + xhr.status)) });
+        });
+      }
+      function getStats() {
+        return getJSON("performance-monitor/stats");
+      }
+      function getSettings() {
+        return getJSON("performance-monitor/settings");
+      }
+      function saveSettings(obj) {
+        return new Promise((resolve, reject) => {
+          $.ajax({ url: admin("performance-monitor/settings"), method: "POST", contentType: "application/json", data: JSON.stringify(obj), success: resolve, error: (xhr) => reject(new Error("HTTP " + xhr.status)) });
+        });
+      }
+      module.exports = { getStats, getSettings, saveSettings };
+    }
+  });
+
+  // src/editor/sidebar/sidebar.js
+  var require_sidebar = __commonJS({
+    "src/editor/sidebar/sidebar.js"(exports, module) {
+      "use strict";
+      var { SECTIONS } = require_sections();
+      var { metricRow } = require_metric_row();
+      var { getStats } = require_api();
+      function buildSidebar2() {
+        const root = document.createElement("div");
+        root.className = "pm-sidebar";
+        let pollingInterval = null;
+        let isPaused = false;
+        const rows = [];
+        const toolbar = document.createElement("div");
+        toolbar.className = "pm-toolbar";
+        const statusEl = document.createElement("div");
+        statusEl.className = "pm-status pm-status-online";
+        statusEl.textContent = "ONLINE";
+        toolbar.appendChild(statusEl);
+        const spacer = document.createElement("div");
+        spacer.style.flex = "1";
+        toolbar.appendChild(spacer);
+        const pauseBtn = document.createElement("button");
+        pauseBtn.className = "pm-toolbar-btn";
+        pauseBtn.setAttribute("title", "Pause polling");
+        pauseBtn.innerHTML = '<i class="fa fa-pause"></i>';
+        pauseBtn.addEventListener("click", () => {
+          isPaused = !isPaused;
+          pauseBtn.classList.toggle("pm-paused", isPaused);
+          pauseBtn.setAttribute("title", isPaused ? "Resume polling" : "Pause polling");
+        });
+        toolbar.appendChild(pauseBtn);
+        const refreshBtn = document.createElement("button");
+        refreshBtn.className = "pm-toolbar-btn";
+        refreshBtn.setAttribute("title", "Force refresh");
+        refreshBtn.innerHTML = '<i class="fa fa-refresh"></i>';
+        refreshBtn.addEventListener("click", () => {
+          getStats().then((stats) => {
+            rows.forEach(({ row }) => row.update(stats));
+            statusEl.className = "pm-status pm-status-online";
+            statusEl.textContent = "ONLINE";
+          }).catch((err) => {
+            console.error("Refresh failed:", err);
+            statusEl.className = "pm-status pm-status-offline";
+            statusEl.textContent = "OFFLINE";
+          });
+        });
+        toolbar.appendChild(refreshBtn);
+        const settingsBtn = document.createElement("button");
+        settingsBtn.className = "pm-toolbar-btn";
+        settingsBtn.setAttribute("title", "Settings");
+        settingsBtn.innerHTML = '<i class="fa fa-cog"></i>';
+        settingsBtn.addEventListener("click", () => {
+          console.log("Settings button clicked (not yet implemented)");
+        });
+        toolbar.appendChild(settingsBtn);
+        root.appendChild(toolbar);
+        const appGroupLabel = document.createElement("div");
+        appGroupLabel.className = "pm-group-head";
+        appGroupLabel.textContent = "Application";
+        root.appendChild(appGroupLabel);
+        const appSection = document.createElement("div");
+        appSection.className = "pm-group";
+        SECTIONS.filter((s) => s.group === "app").forEach((section) => {
+          const { el, update } = metricRow(section);
+          appSection.appendChild(el);
+          rows.push({ section, row: { update } });
+        });
+        root.appendChild(appSection);
+        const sysGroupLabel = document.createElement("div");
+        sysGroupLabel.className = "pm-group-head";
+        sysGroupLabel.textContent = "System";
+        root.appendChild(sysGroupLabel);
+        const sysSection = document.createElement("div");
+        sysSection.className = "pm-group";
+        SECTIONS.filter((s) => s.group === "sys").forEach((section) => {
+          const { el, update } = metricRow(section);
+          sysSection.appendChild(el);
+          rows.push({ section, row: { update } });
+        });
+        root.appendChild(sysSection);
+        function start(interval = 2e3) {
+          if (pollingInterval) return;
+          function poll() {
+            if (isPaused) return;
+            getStats().then((stats) => {
+              rows.forEach(({ row }) => row.update(stats));
+              statusEl.className = "pm-status pm-status-online";
+              statusEl.textContent = "ONLINE";
+            }).catch((err) => {
+              console.error("Poll failed:", err);
+              statusEl.className = "pm-status pm-status-offline";
+              statusEl.textContent = "OFFLINE";
+            });
+          }
+          poll();
+          pollingInterval = setInterval(poll, interval);
+        }
+        function stop() {
+          if (pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+          }
+        }
+        return {
+          el: root,
+          start,
+          stop
+        };
+      }
+      module.exports = { buildSidebar: buildSidebar2 };
+    }
+  });
+
   // src/editor/styles.css
-  var styles_default = ".pm-root { padding: 8px; color: var(--red-ui-primary-text-color, #333); font-size: 12px; }\n\n/* Metric row structure */\n.pm-row {\n  position: relative;\n  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);\n}\n\n/* Row header button */\n.pm-row-head {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  height: 26px;\n  padding: 0 8px;\n  background: none;\n  border: 0;\n  width: 100%;\n  cursor: pointer;\n  color: var(--red-ui-primary-text-color);\n  font-size: 12px;\n  font-family: inherit;\n  text-align: left;\n}\n\n.pm-row-head:hover {\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));\n}\n\n.pm-row-head:active {\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.05));\n}\n\n/* Icon styling */\n.pm-row-head .fa {\n  flex-shrink: 0;\n  width: 16px;\n  text-align: center;\n  color: var(--red-ui-secondary-text-color);\n}\n\n/* Label styling */\n.pm-row-head .pm-label {\n  flex: 1;\n  text-align: left;\n  color: var(--red-ui-secondary-text-color);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n/* Value styling with tabular numbers for alignment */\n.pm-row-head .pm-value {\n  font-variant-numeric: tabular-nums;\n  color: var(--red-ui-primary-text-color);\n  flex-shrink: 0;\n  white-space: nowrap;\n}\n\n/* Fill bar (status indicator) */\n.pm-fill {\n  position: absolute;\n  bottom: 0;\n  left: 0;\n  height: 2px;\n  width: 0;\n  background: var(--red-ui-text-color-link);\n  transition: width 0.2s ease, background-color 0.2s ease;\n}\n\n/* Status color classes */\n.pm-fill.pm-ok {\n  background: var(--red-ui-text-color-success, #3a3);\n}\n\n.pm-fill.pm-warn {\n  background: var(--red-ui-secondary-border-color, #f0ad4e);\n}\n\n.pm-fill.pm-crit {\n  background: var(--red-ui-text-color-error, #c33);\n}\n\n/* Detail panel (collapsed by default) */\n.pm-detail {\n  display: none;\n  padding: 4px 8px 8px 24px;\n  color: var(--red-ui-primary-text-color);\n  font-size: 11px;\n}\n\n/* Show detail when row is open */\n.pm-open .pm-detail {\n  display: block;\n}\n\n/* Detail grid layout for label-value pairs */\n.pm-detail-grid {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 4px 12px;\n  margin-bottom: 8px;\n}\n\n.pm-detail-label {\n  color: var(--red-ui-tertiary-text-color);\n  font-weight: 500;\n}\n\n.pm-detail-value {\n  color: var(--red-ui-primary-text-color);\n  font-variant-numeric: tabular-nums;\n  text-align: right;\n}\n\n/* Sparkline container */\n.pm-sparkline-container {\n  margin-top: 8px;\n  border-top: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  padding-top: 8px;\n}\n\n.pm-spark {\n  width: 100%;\n  height: auto;\n  max-width: 100px;\n  display: inline-block;\n}\n\n/* Group headers (for future use in list context) */\n.pm-group-head {\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: 0.04em;\n  color: var(--red-ui-tertiary-text-color);\n  padding: 6px 8px 2px;\n  font-weight: 600;\n}\n";
+  var styles_default = ".pm-root { padding: 8px; color: var(--red-ui-primary-text-color, #333); font-size: 12px; }\n\n/* Sidebar container */\n.pm-sidebar {\n  display: flex;\n  flex-direction: column;\n  height: 100%;\n  color: var(--red-ui-primary-text-color);\n  font-size: 12px;\n}\n\n/* Toolbar at top */\n.pm-toolbar {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  height: 32px;\n  padding: 4px 8px;\n  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));\n  flex-shrink: 0;\n}\n\n/* Toolbar buttons */\n.pm-toolbar-btn {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  width: 24px;\n  height: 24px;\n  padding: 0;\n  background: none;\n  border: 1px solid transparent;\n  border-radius: 2px;\n  color: var(--red-ui-secondary-text-color);\n  cursor: pointer;\n  font-size: 12px;\n  transition: background-color 0.15s ease;\n}\n\n.pm-toolbar-btn:hover {\n  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.05));\n}\n\n.pm-toolbar-btn:active {\n  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.1));\n}\n\n.pm-toolbar-btn.pm-paused {\n  color: var(--red-ui-text-color-warning, #ff9800);\n}\n\n/* Status indicator */\n.pm-status {\n  font-size: 11px;\n  font-weight: 600;\n  padding: 2px 6px;\n  border-radius: 2px;\n  flex-shrink: 0;\n  letter-spacing: 0.05em;\n}\n\n.pm-status-online {\n  color: var(--red-ui-text-color-success, #3a3);\n  background: var(--red-ui-text-color-success, rgba(51, 170, 51, 0.1));\n}\n\n.pm-status-offline {\n  color: var(--red-ui-text-color-error, #c33);\n  background: var(--red-ui-text-color-error, rgba(204, 51, 51, 0.1));\n}\n\n/* Metric row structure */\n.pm-row {\n  position: relative;\n  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);\n}\n\n/* Row header button */\n.pm-row-head {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  height: 26px;\n  padding: 0 8px;\n  background: none;\n  border: 0;\n  width: 100%;\n  cursor: pointer;\n  color: var(--red-ui-primary-text-color);\n  font-size: 12px;\n  font-family: inherit;\n  text-align: left;\n}\n\n.pm-row-head:hover {\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));\n}\n\n.pm-row-head:active {\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.05));\n}\n\n/* Icon styling */\n.pm-row-head .fa {\n  flex-shrink: 0;\n  width: 16px;\n  text-align: center;\n  color: var(--red-ui-secondary-text-color);\n}\n\n/* Label styling */\n.pm-row-head .pm-label {\n  flex: 1;\n  text-align: left;\n  color: var(--red-ui-secondary-text-color);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n/* Value styling with tabular numbers for alignment */\n.pm-row-head .pm-value {\n  font-variant-numeric: tabular-nums;\n  color: var(--red-ui-primary-text-color);\n  flex-shrink: 0;\n  white-space: nowrap;\n}\n\n/* Fill bar (status indicator) */\n.pm-fill {\n  position: absolute;\n  bottom: 0;\n  left: 0;\n  height: 2px;\n  width: 0;\n  background: var(--red-ui-text-color-link);\n  transition: width 0.2s ease, background-color 0.2s ease;\n}\n\n/* Status color classes */\n.pm-fill.pm-ok {\n  background: var(--red-ui-text-color-success, #3a3);\n}\n\n.pm-fill.pm-warn {\n  background: var(--red-ui-secondary-border-color, #f0ad4e);\n}\n\n.pm-fill.pm-crit {\n  background: var(--red-ui-text-color-error, #c33);\n}\n\n/* Detail panel (collapsed by default) */\n.pm-detail {\n  display: none;\n  padding: 4px 8px 8px 24px;\n  color: var(--red-ui-primary-text-color);\n  font-size: 11px;\n}\n\n/* Show detail when row is open */\n.pm-open .pm-detail {\n  display: block;\n}\n\n/* Detail grid layout for label-value pairs */\n.pm-detail-grid {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 4px 12px;\n  margin-bottom: 8px;\n}\n\n.pm-detail-label {\n  color: var(--red-ui-tertiary-text-color);\n  font-weight: 500;\n}\n\n.pm-detail-value {\n  color: var(--red-ui-primary-text-color);\n  font-variant-numeric: tabular-nums;\n  text-align: right;\n}\n\n/* Sparkline container */\n.pm-sparkline-container {\n  margin-top: 8px;\n  border-top: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  padding-top: 8px;\n}\n\n.pm-spark {\n  width: 100%;\n  height: auto;\n  max-width: 100px;\n  display: inline-block;\n}\n\n/* Group headers */\n.pm-group-head {\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: 0.04em;\n  color: var(--red-ui-tertiary-text-color);\n  padding: 6px 8px 2px;\n  font-weight: 600;\n  margin-top: 8px;\n}\n\n.pm-group-head:first-child {\n  margin-top: 0;\n}\n\n/* Group container */\n.pm-group {\n  border: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  border-radius: 2px;\n  overflow: hidden;\n}\n";
 
   // src/editor/index.js
+  var import_sidebar = __toESM(require_sidebar());
   (function() {
     "use strict";
     const styleEl = document.createElement("style");
     styleEl.textContent = styles_default;
     document.head.appendChild(styleEl);
-    function content() {
-      const el = document.createElement("div");
-      el.className = "pm-root";
-      el.textContent = "Performance Monitor";
-      return el;
-    }
+    const { el: sidebarEl, start, stop } = (0, import_sidebar.buildSidebar)();
     RED.plugins.registerPlugin("performance-monitor", {
       type: "performance-monitor",
       onadd() {
       }
     });
-    RED.sidebar.addTab({
+    const tab = RED.sidebar.addTab({
       id: "performance-monitor",
       name: "Performance Monitor",
       iconClass: "fa fa-tachometer",
-      content: content()
+      content: sidebarEl
     });
+    start();
   })();
 })();
 
