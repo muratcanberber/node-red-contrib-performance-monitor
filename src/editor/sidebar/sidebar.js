@@ -68,15 +68,11 @@ function buildSidebar() {
   });
   toolbar.appendChild(refreshBtn);
 
-  // Settings button (stub for now)
+  // Settings button (real handler wired in index.js)
   const settingsBtn = document.createElement('button');
   settingsBtn.className = 'pm-toolbar-btn';
   settingsBtn.setAttribute('title', 'Settings');
   settingsBtn.innerHTML = '<i class="fa fa-cog"></i>';
-  settingsBtn.addEventListener('click', () => {
-    // Stub: placeholder for Task 8 (settings panel)
-    console.log('Settings button clicked (not yet implemented)');
-  });
   toolbar.appendChild(settingsBtn);
 
   root.appendChild(toolbar);

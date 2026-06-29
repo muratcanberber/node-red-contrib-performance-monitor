@@ -257,6 +257,7 @@
   gap: 2px;
   padding: 0 6px;
   white-space: nowrap;
+  position: relative;
 }
 
 .pm-hud-label {
@@ -272,6 +273,18 @@
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   color: var(--red-ui-primary-text-color, #333);
+}
+
+.pm-hud-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  width: 0;
+  background: var(--red-ui-text-color-link, #0084ff);
+  transition: width 0.6s ease;
+  opacity: 0.6;
+  border-radius: 1px;
 }
 
 .pm-hud-separator {

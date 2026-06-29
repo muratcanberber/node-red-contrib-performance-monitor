@@ -458,9 +458,6 @@
         settingsBtn.className = "pm-toolbar-btn";
         settingsBtn.setAttribute("title", "Settings");
         settingsBtn.innerHTML = '<i class="fa fa-cog"></i>';
-        settingsBtn.addEventListener("click", () => {
-          console.log("Settings button clicked (not yet implemented)");
-        });
         toolbar.appendChild(settingsBtn);
         root.appendChild(toolbar);
         const appGroupLabel = document.createElement("div");
@@ -535,6 +532,7 @@
     "src/editor/hud/header-widget.js"(exports, module) {
       "use strict";
       var { formatBytes } = require_format();
+      var globalPeakRss = 0;
       function initHud2() {
         const header = document.getElementById("red-ui-header");
         if (!header) {
@@ -554,57 +552,53 @@
         }
         let hudEl = document.getElementById("pm-hud");
         if (hudEl) {
+          const peakRssData = hudEl.getAttribute("data-peak-rss");
+          if (peakRssData) {
+            globalPeakRss = parseInt(peakRssData, 10);
+          }
           return createHudInterface(hudEl);
         }
         hudEl = document.createElement("div");
         hudEl.id = "pm-hud";
         hudEl.className = "pm-hud";
+        hudEl.setAttribute("data-peak-rss", String(globalPeakRss));
         const metricsContainer = document.createElement("div");
         metricsContainer.className = "pm-hud-metrics";
-        const cpuMetric = document.createElement("div");
-        cpuMetric.className = "pm-hud-metric";
-        const cpuLabel = document.createElement("span");
-        cpuLabel.className = "pm-hud-label";
-        cpuLabel.textContent = "CPU";
-        const cpuValue = document.createElement("span");
-        cpuValue.className = "pm-hud-value";
-        cpuValue.textContent = "\u2014";
-        cpuMetric.appendChild(cpuLabel);
-        cpuMetric.appendChild(cpuValue);
-        metricsContainer.appendChild(cpuMetric);
+        function createMetric(label, metric) {
+          const metricEl = document.createElement("div");
+          metricEl.className = "pm-hud-metric";
+          metricEl.setAttribute("data-metric", metric);
+          const labelEl = document.createElement("span");
+          labelEl.className = "pm-hud-label";
+          labelEl.textContent = label;
+          const valueEl = document.createElement("span");
+          valueEl.className = "pm-hud-value";
+          valueEl.textContent = "\u2014";
+          const fillEl = document.createElement("div");
+          fillEl.className = "pm-hud-fill";
+          metricEl.appendChild(fillEl);
+          metricEl.appendChild(labelEl);
+          metricEl.appendChild(valueEl);
+          return { el: metricEl, valueEl, fillEl };
+        }
+        const cpuMetric = createMetric("CPU", "cpu");
+        metricsContainer.appendChild(cpuMetric.el);
         const sep1 = document.createElement("div");
         sep1.className = "pm-hud-separator";
         metricsContainer.appendChild(sep1);
-        const rssMetric = document.createElement("div");
-        rssMetric.className = "pm-hud-metric";
-        const rssLabel = document.createElement("span");
-        rssLabel.className = "pm-hud-label";
-        rssLabel.textContent = "RSS";
-        const rssValue = document.createElement("span");
-        rssValue.className = "pm-hud-value";
-        rssValue.textContent = "\u2014";
-        rssMetric.appendChild(rssLabel);
-        rssMetric.appendChild(rssValue);
-        metricsContainer.appendChild(rssMetric);
+        const rssMetric = createMetric("RSS", "rss");
+        metricsContainer.appendChild(rssMetric.el);
         const sep2 = document.createElement("div");
         sep2.className = "pm-hud-separator";
         metricsContainer.appendChild(sep2);
-        const lagMetric = document.createElement("div");
-        lagMetric.className = "pm-hud-metric";
-        const lagLabel = document.createElement("span");
-        lagLabel.className = "pm-hud-label";
-        lagLabel.textContent = "LAG";
-        const lagValue = document.createElement("span");
-        lagValue.className = "pm-hud-value";
-        lagValue.textContent = "\u2014";
-        lagMetric.appendChild(lagLabel);
-        lagMetric.appendChild(lagValue);
-        metricsContainer.appendChild(lagMetric);
+        const lagMetric = createMetric("LAG", "lag");
+        metricsContainer.appendChild(lagMetric.el);
         const sep3 = document.createElement("div");
         sep3.className = "pm-hud-separator";
         metricsContainer.appendChild(sep3);
         const peakMetric = document.createElement("div");
         peakMetric.className = "pm-hud-metric";
+        peakMetric.setAttribute("data-metric", "peak");
         const peakLabel = document.createElement("span");
         peakLabel.className = "pm-hud-label";
         peakLabel.textContent = "PEAK";
@@ -616,20 +610,27 @@
         metricsContainer.appendChild(peakMetric);
         hudEl.appendChild(metricsContainer);
         header.insertBefore(hudEl, toolbar);
-        let peakRss = 0;
         return {
           update(stats) {
             if (!stats) return;
             const cpu = stats.nodeRed?.cpu?.percentage ?? 0;
-            cpuValue.textContent = cpu.toFixed(1) + "%";
+            cpuMetric.valueEl.textContent = cpu.toFixed(1) + "%";
+            const cpuFill = Math.min(cpu, 100);
+            cpuMetric.fillEl.style.width = cpuFill + "%";
             const rss = stats.nodeRed?.memory?.rss ?? 0;
-            rssValue.textContent = formatBytes(rss);
-            if (rss > peakRss) {
-              peakRss = rss;
+            rssMetric.valueEl.textContent = formatBytes(rss);
+            if (rss > globalPeakRss) {
+              globalPeakRss = rss;
+              hudEl.setAttribute("data-peak-rss", String(globalPeakRss));
             }
-            peakValue.textContent = formatBytes(peakRss);
+            const rssFill = globalPeakRss > 0 ? Math.min(rss / globalPeakRss * 100, 100) : 0;
+            rssMetric.fillEl.style.width = rssFill + "%";
+            const peakValue2 = peakMetric.querySelector(".pm-hud-value");
+            peakValue2.textContent = formatBytes(globalPeakRss);
             const lag = stats.nodeRed?.eventLoop?.lagMs ?? 0;
-            lagValue.textContent = lag.toFixed(0) + " ms";
+            lagMetric.valueEl.textContent = lag.toFixed(0) + " ms";
+            const lagFill = Math.min(lag / 50 * 100, 100);
+            lagMetric.fillEl.style.width = lagFill + "%";
           },
           setVisible(visible) {
             hudEl.style.display = visible ? "" : "none";
@@ -642,31 +643,44 @@
         };
       }
       function createHudInterface(hudEl) {
-        let peakRss = 0;
         return {
           update(stats) {
             if (!stats) return;
-            const cpuValue = hudEl.querySelector(".pm-hud-metric:nth-child(1) .pm-hud-value");
-            const rssValue = hudEl.querySelector(".pm-hud-metric:nth-child(3) .pm-hud-value");
-            const lagValue = hudEl.querySelector(".pm-hud-metric:nth-child(5) .pm-hud-value");
-            const peakValue = hudEl.querySelector(".pm-hud-metric:nth-child(7) .pm-hud-value");
-            if (cpuValue) {
+            const cpuMetricEl = hudEl.querySelector('[data-metric="cpu"]');
+            const rssMetricEl = hudEl.querySelector('[data-metric="rss"]');
+            const lagMetricEl = hudEl.querySelector('[data-metric="lag"]');
+            const peakMetricEl = hudEl.querySelector('[data-metric="peak"]');
+            if (cpuMetricEl) {
+              const cpuValue = cpuMetricEl.querySelector(".pm-hud-value");
+              const cpuFill = cpuMetricEl.querySelector(".pm-hud-fill");
               const cpu = stats.nodeRed?.cpu?.percentage ?? 0;
-              cpuValue.textContent = cpu.toFixed(1) + "%";
+              if (cpuValue) cpuValue.textContent = cpu.toFixed(1) + "%";
+              if (cpuFill) cpuFill.style.width = Math.min(cpu, 100) + "%";
             }
-            if (rssValue) {
+            if (rssMetricEl) {
+              const rssValue = rssMetricEl.querySelector(".pm-hud-value");
+              const rssFill = rssMetricEl.querySelector(".pm-hud-fill");
               const rss = stats.nodeRed?.memory?.rss ?? 0;
-              rssValue.textContent = formatBytes(rss);
-              if (rss > peakRss) {
-                peakRss = rss;
+              if (rssValue) rssValue.textContent = formatBytes(rss);
+              if (rss > globalPeakRss) {
+                globalPeakRss = rss;
+                hudEl.setAttribute("data-peak-rss", String(globalPeakRss));
+              }
+              if (rssFill) {
+                const rssFillPct = globalPeakRss > 0 ? Math.min(rss / globalPeakRss * 100, 100) : 0;
+                rssFill.style.width = rssFillPct + "%";
               }
             }
-            if (peakValue) {
-              peakValue.textContent = formatBytes(peakRss);
+            if (peakMetricEl) {
+              const peakValue = peakMetricEl.querySelector(".pm-hud-value");
+              if (peakValue) peakValue.textContent = formatBytes(globalPeakRss);
             }
-            if (lagValue) {
+            if (lagMetricEl) {
+              const lagValue = lagMetricEl.querySelector(".pm-hud-value");
+              const lagFill = lagMetricEl.querySelector(".pm-hud-fill");
               const lag = stats.nodeRed?.eventLoop?.lagMs ?? 0;
-              lagValue.textContent = lag.toFixed(0) + " ms";
+              if (lagValue) lagValue.textContent = lag.toFixed(0) + " ms";
+              if (lagFill) lagFill.style.width = Math.min(lag / 50 * 100, 100) + "%";
             }
           },
           setVisible(visible) {
@@ -689,7 +703,7 @@
       "use strict";
       var { getSettings: getSettings2, saveSettings } = require_api();
       function openSettings2(opts = {}) {
-        const { current = {}, onRestartPolling, onToggleHud } = opts;
+        const { current = {}, onRestartPolling, onToggleHud, onClose } = opts;
         const panelEl = document.createElement("div");
         panelEl.className = "pm-settings-panel";
         const headerEl = document.createElement("div");
@@ -783,6 +797,9 @@
           if (panelEl.parentElement) {
             panelEl.parentElement.removeChild(panelEl);
           }
+          if (onClose) {
+            onClose();
+          }
         };
         saveBtn.addEventListener("click", (e) => {
           e.preventDefault();
@@ -838,7 +855,7 @@
   });
 
   // src/editor/styles.css
-  var styles_default = ".pm-root { padding: 8px; color: var(--red-ui-primary-text-color, #333); font-size: 12px; }\n\n/* Sidebar container */\n.pm-sidebar {\n  display: flex;\n  flex-direction: column;\n  height: 100%;\n  color: var(--red-ui-primary-text-color);\n  font-size: 12px;\n}\n\n/* Toolbar at top */\n.pm-toolbar {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  height: 32px;\n  padding: 4px 8px;\n  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));\n  flex-shrink: 0;\n}\n\n/* Toolbar buttons */\n.pm-toolbar-btn {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  width: 24px;\n  height: 24px;\n  padding: 0;\n  background: none;\n  border: 1px solid transparent;\n  border-radius: 2px;\n  color: var(--red-ui-secondary-text-color);\n  cursor: pointer;\n  font-size: 12px;\n  transition: background-color 0.15s ease;\n}\n\n.pm-toolbar-btn:hover {\n  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.05));\n}\n\n.pm-toolbar-btn:active {\n  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.1));\n}\n\n.pm-toolbar-btn.pm-paused {\n  color: var(--red-ui-text-color-warning, #ff9800);\n}\n\n/* Status indicator */\n.pm-status {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  font-size: 11px;\n  font-weight: 600;\n  flex-shrink: 0;\n  letter-spacing: 0.05em;\n  color: var(--red-ui-secondary-text-color, #666);\n}\n\n.pm-status-dot {\n  display: inline-block;\n  width: 8px;\n  height: 8px;\n  border-radius: 50%;\n  flex-shrink: 0;\n}\n\n.pm-status-label {\n  white-space: nowrap;\n}\n\n.pm-status-online .pm-status-dot {\n  background: var(--red-ui-text-color-success, #5a5);\n}\n\n.pm-status-offline .pm-status-dot {\n  background: var(--red-ui-text-color-error, #c33);\n}\n\n/* Metric row structure */\n.pm-row {\n  position: relative;\n  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);\n}\n\n/* Row header button */\n.pm-row-head {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  height: 26px;\n  padding: 0 8px;\n  background: none;\n  border: 0;\n  width: 100%;\n  cursor: pointer;\n  color: var(--red-ui-primary-text-color);\n  font-size: 12px;\n  font-family: inherit;\n  text-align: left;\n}\n\n.pm-row-head:hover {\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));\n}\n\n.pm-row-head:active {\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.05));\n}\n\n/* Icon styling */\n.pm-row-head .fa {\n  flex-shrink: 0;\n  width: 16px;\n  text-align: center;\n  color: var(--red-ui-secondary-text-color);\n}\n\n/* Label styling */\n.pm-row-head .pm-label {\n  flex: 1;\n  text-align: left;\n  color: var(--red-ui-secondary-text-color);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n/* Value styling with tabular numbers for alignment */\n.pm-row-head .pm-value {\n  font-variant-numeric: tabular-nums;\n  color: var(--red-ui-primary-text-color);\n  flex-shrink: 0;\n  white-space: nowrap;\n}\n\n/* Fill bar (status indicator) */\n.pm-fill {\n  position: absolute;\n  bottom: 0;\n  left: 0;\n  height: 2px;\n  width: 0;\n  background: var(--red-ui-text-color-link);\n  transition: width 0.2s ease, background-color 0.2s ease;\n}\n\n/* Status color classes */\n.pm-fill.pm-ok {\n  background: var(--red-ui-text-color-success, #3a3);\n}\n\n.pm-fill.pm-warn {\n  background: var(--red-ui-secondary-border-color, #f0ad4e);\n}\n\n.pm-fill.pm-crit {\n  background: var(--red-ui-text-color-error, #c33);\n}\n\n/* Detail panel (collapsed by default) */\n.pm-detail {\n  display: none;\n  padding: 4px 8px 8px 24px;\n  color: var(--red-ui-primary-text-color);\n  font-size: 11px;\n}\n\n/* Show detail when row is open */\n.pm-open .pm-detail {\n  display: block;\n}\n\n/* Detail grid layout for label-value pairs */\n.pm-detail-grid {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 4px 12px;\n  margin-bottom: 8px;\n}\n\n.pm-detail-label {\n  color: var(--red-ui-tertiary-text-color);\n  font-weight: 500;\n}\n\n.pm-detail-value {\n  color: var(--red-ui-primary-text-color);\n  font-variant-numeric: tabular-nums;\n  text-align: right;\n}\n\n/* Sparkline container */\n.pm-sparkline-container {\n  margin-top: 8px;\n  border-top: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  padding-top: 8px;\n}\n\n.pm-spark {\n  width: 100%;\n  height: auto;\n  max-width: 100px;\n  display: inline-block;\n}\n\n/* Group headers */\n.pm-group-head {\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: 0.04em;\n  color: var(--red-ui-tertiary-text-color);\n  padding: 6px 8px 2px;\n  font-weight: 600;\n  margin-top: 8px;\n}\n\n.pm-group-head:first-child {\n  margin-top: 0;\n}\n\n/* Group container */\n.pm-group {\n  border: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  border-radius: 2px;\n  overflow: hidden;\n}\n\n/* ===== Header HUD ===== */\n.pm-hud {\n  display: flex;\n  align-items: center;\n  gap: 0;\n  height: 100%;\n  padding: 0 8px;\n  color: var(--red-ui-primary-text-color, #333);\n  font-size: 11px;\n}\n\n.pm-hud-metrics {\n  display: flex;\n  align-items: center;\n  gap: 0;\n  height: 100%;\n}\n\n.pm-hud-metric {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  justify-content: center;\n  gap: 2px;\n  padding: 0 6px;\n  white-space: nowrap;\n}\n\n.pm-hud-label {\n  font-size: 9px;\n  font-weight: 600;\n  letter-spacing: 0.05em;\n  text-transform: uppercase;\n  color: var(--red-ui-tertiary-text-color, #999);\n}\n\n.pm-hud-value {\n  font-size: 11px;\n  font-weight: 500;\n  font-variant-numeric: tabular-nums;\n  color: var(--red-ui-primary-text-color, #333);\n}\n\n.pm-hud-separator {\n  width: 1px;\n  height: 16px;\n  background: var(--red-ui-tertiary-border-color, #ddd);\n  margin: 0 4px;\n}\n\n/* ===== Settings Panel ===== */\n.pm-settings-panel {\n  display: flex;\n  flex-direction: column;\n  padding: 8px;\n  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));\n}\n\n.pm-settings-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  margin-bottom: 12px;\n  gap: 8px;\n}\n\n.pm-settings-title {\n  font-size: 13px;\n  font-weight: 600;\n  color: var(--red-ui-primary-text-color);\n  margin: 0;\n  padding: 0;\n}\n\n.pm-settings-close {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  width: 20px;\n  height: 20px;\n  padding: 0;\n  background: none;\n  border: 1px solid transparent;\n  border-radius: 2px;\n  color: var(--red-ui-secondary-text-color);\n  cursor: pointer;\n  font-size: 11px;\n  transition: background-color 0.15s ease;\n}\n\n.pm-settings-close:hover {\n  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.05));\n}\n\n.pm-settings-form {\n  display: flex;\n  flex-direction: column;\n  gap: 10px;\n}\n\n.pm-settings-field {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n\n.pm-settings-label {\n  font-size: 11px;\n  font-weight: 500;\n  color: var(--red-ui-secondary-text-color);\n  display: block;\n}\n\n.pm-settings-input {\n  padding: 4px 6px;\n  font-size: 11px;\n  border: 1px solid var(--red-ui-tertiary-border-color, #ccc);\n  border-radius: 2px;\n  background: var(--red-ui-primary-background, #fff);\n  color: var(--red-ui-primary-text-color);\n  font-family: inherit;\n}\n\n.pm-settings-input:focus {\n  outline: none;\n  border-color: var(--red-ui-text-color-link, #0084ff);\n  box-shadow: 0 0 0 2px var(--red-ui-text-color-link, rgba(0, 132, 255, 0.1));\n}\n\n/* Checkbox field layout */\n.pm-settings-checkbox-field {\n  flex-direction: row;\n  align-items: center;\n  gap: 6px;\n  margin-top: 4px;\n}\n\n.pm-settings-checkbox {\n  width: 16px;\n  height: 16px;\n  cursor: pointer;\n  accent-color: var(--red-ui-text-color-link, #0084ff);\n}\n\n.pm-settings-checkbox-label {\n  font-size: 11px;\n  color: var(--red-ui-primary-text-color);\n  cursor: pointer;\n  user-select: none;\n}\n\n.pm-settings-buttons {\n  display: flex;\n  gap: 6px;\n  margin-top: 8px;\n  justify-content: flex-end;\n}\n\n.pm-settings-btn {\n  padding: 6px 12px;\n  font-size: 11px;\n  font-weight: 500;\n  border: 1px solid transparent;\n  border-radius: 2px;\n  cursor: pointer;\n  font-family: inherit;\n  transition: background-color 0.15s ease, color 0.15s ease;\n}\n\n.pm-settings-btn-save {\n  background: var(--red-ui-text-color-link, #0084ff);\n  color: var(--red-ui-primary-background, #fff);\n}\n\n.pm-settings-btn-save:hover {\n  background: var(--red-ui-text-color-link, #0066cc);\n}\n\n.pm-settings-btn-cancel {\n  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.05));\n  color: var(--red-ui-primary-text-color);\n  border: 1px solid var(--red-ui-tertiary-border-color, #ccc);\n}\n\n.pm-settings-btn-cancel:hover {\n  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.1));\n}\n";
+  var styles_default = ".pm-root { padding: 8px; color: var(--red-ui-primary-text-color, #333); font-size: 12px; }\n\n/* Sidebar container */\n.pm-sidebar {\n  display: flex;\n  flex-direction: column;\n  height: 100%;\n  color: var(--red-ui-primary-text-color);\n  font-size: 12px;\n}\n\n/* Toolbar at top */\n.pm-toolbar {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  height: 32px;\n  padding: 4px 8px;\n  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));\n  flex-shrink: 0;\n}\n\n/* Toolbar buttons */\n.pm-toolbar-btn {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  width: 24px;\n  height: 24px;\n  padding: 0;\n  background: none;\n  border: 1px solid transparent;\n  border-radius: 2px;\n  color: var(--red-ui-secondary-text-color);\n  cursor: pointer;\n  font-size: 12px;\n  transition: background-color 0.15s ease;\n}\n\n.pm-toolbar-btn:hover {\n  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.05));\n}\n\n.pm-toolbar-btn:active {\n  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.1));\n}\n\n.pm-toolbar-btn.pm-paused {\n  color: var(--red-ui-text-color-warning, #ff9800);\n}\n\n/* Status indicator */\n.pm-status {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  font-size: 11px;\n  font-weight: 600;\n  flex-shrink: 0;\n  letter-spacing: 0.05em;\n  color: var(--red-ui-secondary-text-color, #666);\n}\n\n.pm-status-dot {\n  display: inline-block;\n  width: 8px;\n  height: 8px;\n  border-radius: 50%;\n  flex-shrink: 0;\n}\n\n.pm-status-label {\n  white-space: nowrap;\n}\n\n.pm-status-online .pm-status-dot {\n  background: var(--red-ui-text-color-success, #5a5);\n}\n\n.pm-status-offline .pm-status-dot {\n  background: var(--red-ui-text-color-error, #c33);\n}\n\n/* Metric row structure */\n.pm-row {\n  position: relative;\n  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);\n}\n\n/* Row header button */\n.pm-row-head {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  height: 26px;\n  padding: 0 8px;\n  background: none;\n  border: 0;\n  width: 100%;\n  cursor: pointer;\n  color: var(--red-ui-primary-text-color);\n  font-size: 12px;\n  font-family: inherit;\n  text-align: left;\n}\n\n.pm-row-head:hover {\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));\n}\n\n.pm-row-head:active {\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.05));\n}\n\n/* Icon styling */\n.pm-row-head .fa {\n  flex-shrink: 0;\n  width: 16px;\n  text-align: center;\n  color: var(--red-ui-secondary-text-color);\n}\n\n/* Label styling */\n.pm-row-head .pm-label {\n  flex: 1;\n  text-align: left;\n  color: var(--red-ui-secondary-text-color);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n/* Value styling with tabular numbers for alignment */\n.pm-row-head .pm-value {\n  font-variant-numeric: tabular-nums;\n  color: var(--red-ui-primary-text-color);\n  flex-shrink: 0;\n  white-space: nowrap;\n}\n\n/* Fill bar (status indicator) */\n.pm-fill {\n  position: absolute;\n  bottom: 0;\n  left: 0;\n  height: 2px;\n  width: 0;\n  background: var(--red-ui-text-color-link);\n  transition: width 0.2s ease, background-color 0.2s ease;\n}\n\n/* Status color classes */\n.pm-fill.pm-ok {\n  background: var(--red-ui-text-color-success, #3a3);\n}\n\n.pm-fill.pm-warn {\n  background: var(--red-ui-secondary-border-color, #f0ad4e);\n}\n\n.pm-fill.pm-crit {\n  background: var(--red-ui-text-color-error, #c33);\n}\n\n/* Detail panel (collapsed by default) */\n.pm-detail {\n  display: none;\n  padding: 4px 8px 8px 24px;\n  color: var(--red-ui-primary-text-color);\n  font-size: 11px;\n}\n\n/* Show detail when row is open */\n.pm-open .pm-detail {\n  display: block;\n}\n\n/* Detail grid layout for label-value pairs */\n.pm-detail-grid {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 4px 12px;\n  margin-bottom: 8px;\n}\n\n.pm-detail-label {\n  color: var(--red-ui-tertiary-text-color);\n  font-weight: 500;\n}\n\n.pm-detail-value {\n  color: var(--red-ui-primary-text-color);\n  font-variant-numeric: tabular-nums;\n  text-align: right;\n}\n\n/* Sparkline container */\n.pm-sparkline-container {\n  margin-top: 8px;\n  border-top: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  padding-top: 8px;\n}\n\n.pm-spark {\n  width: 100%;\n  height: auto;\n  max-width: 100px;\n  display: inline-block;\n}\n\n/* Group headers */\n.pm-group-head {\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: 0.04em;\n  color: var(--red-ui-tertiary-text-color);\n  padding: 6px 8px 2px;\n  font-weight: 600;\n  margin-top: 8px;\n}\n\n.pm-group-head:first-child {\n  margin-top: 0;\n}\n\n/* Group container */\n.pm-group {\n  border: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  border-radius: 2px;\n  overflow: hidden;\n}\n\n/* ===== Header HUD ===== */\n.pm-hud {\n  display: flex;\n  align-items: center;\n  gap: 0;\n  height: 100%;\n  padding: 0 8px;\n  color: var(--red-ui-primary-text-color, #333);\n  font-size: 11px;\n}\n\n.pm-hud-metrics {\n  display: flex;\n  align-items: center;\n  gap: 0;\n  height: 100%;\n}\n\n.pm-hud-metric {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  justify-content: center;\n  gap: 2px;\n  padding: 0 6px;\n  white-space: nowrap;\n  position: relative;\n}\n\n.pm-hud-label {\n  font-size: 9px;\n  font-weight: 600;\n  letter-spacing: 0.05em;\n  text-transform: uppercase;\n  color: var(--red-ui-tertiary-text-color, #999);\n}\n\n.pm-hud-value {\n  font-size: 11px;\n  font-weight: 500;\n  font-variant-numeric: tabular-nums;\n  color: var(--red-ui-primary-text-color, #333);\n}\n\n.pm-hud-fill {\n  position: absolute;\n  bottom: 0;\n  left: 0;\n  height: 2px;\n  width: 0;\n  background: var(--red-ui-text-color-link, #0084ff);\n  transition: width 0.6s ease;\n  opacity: 0.6;\n  border-radius: 1px;\n}\n\n.pm-hud-separator {\n  width: 1px;\n  height: 16px;\n  background: var(--red-ui-tertiary-border-color, #ddd);\n  margin: 0 4px;\n}\n\n/* ===== Settings Panel ===== */\n.pm-settings-panel {\n  display: flex;\n  flex-direction: column;\n  padding: 8px;\n  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));\n}\n\n.pm-settings-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  margin-bottom: 12px;\n  gap: 8px;\n}\n\n.pm-settings-title {\n  font-size: 13px;\n  font-weight: 600;\n  color: var(--red-ui-primary-text-color);\n  margin: 0;\n  padding: 0;\n}\n\n.pm-settings-close {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  width: 20px;\n  height: 20px;\n  padding: 0;\n  background: none;\n  border: 1px solid transparent;\n  border-radius: 2px;\n  color: var(--red-ui-secondary-text-color);\n  cursor: pointer;\n  font-size: 11px;\n  transition: background-color 0.15s ease;\n}\n\n.pm-settings-close:hover {\n  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.05));\n}\n\n.pm-settings-form {\n  display: flex;\n  flex-direction: column;\n  gap: 10px;\n}\n\n.pm-settings-field {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n\n.pm-settings-label {\n  font-size: 11px;\n  font-weight: 500;\n  color: var(--red-ui-secondary-text-color);\n  display: block;\n}\n\n.pm-settings-input {\n  padding: 4px 6px;\n  font-size: 11px;\n  border: 1px solid var(--red-ui-tertiary-border-color, #ccc);\n  border-radius: 2px;\n  background: var(--red-ui-primary-background, #fff);\n  color: var(--red-ui-primary-text-color);\n  font-family: inherit;\n}\n\n.pm-settings-input:focus {\n  outline: none;\n  border-color: var(--red-ui-text-color-link, #0084ff);\n  box-shadow: 0 0 0 2px var(--red-ui-text-color-link, rgba(0, 132, 255, 0.1));\n}\n\n/* Checkbox field layout */\n.pm-settings-checkbox-field {\n  flex-direction: row;\n  align-items: center;\n  gap: 6px;\n  margin-top: 4px;\n}\n\n.pm-settings-checkbox {\n  width: 16px;\n  height: 16px;\n  cursor: pointer;\n  accent-color: var(--red-ui-text-color-link, #0084ff);\n}\n\n.pm-settings-checkbox-label {\n  font-size: 11px;\n  color: var(--red-ui-primary-text-color);\n  cursor: pointer;\n  user-select: none;\n}\n\n.pm-settings-buttons {\n  display: flex;\n  gap: 6px;\n  margin-top: 8px;\n  justify-content: flex-end;\n}\n\n.pm-settings-btn {\n  padding: 6px 12px;\n  font-size: 11px;\n  font-weight: 500;\n  border: 1px solid transparent;\n  border-radius: 2px;\n  cursor: pointer;\n  font-family: inherit;\n  transition: background-color 0.15s ease, color 0.15s ease;\n}\n\n.pm-settings-btn-save {\n  background: var(--red-ui-text-color-link, #0084ff);\n  color: var(--red-ui-primary-background, #fff);\n}\n\n.pm-settings-btn-save:hover {\n  background: var(--red-ui-text-color-link, #0066cc);\n}\n\n.pm-settings-btn-cancel {\n  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.05));\n  color: var(--red-ui-primary-text-color);\n  border: 1px solid var(--red-ui-tertiary-border-color, #ccc);\n}\n\n.pm-settings-btn-cancel:hover {\n  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.1));\n}\n";
 
   // src/editor/index.js
   var import_sidebar = __toESM(require_sidebar());
@@ -864,21 +881,31 @@
     });
     const hud = (0, import_header_widget.initHud)();
     registerExternalUpdater((stats) => hud.update(stats));
+    let currentSettingsPanel = null;
     const settingsBtn = sidebarEl.querySelector(".pm-toolbar-btn:last-child");
     if (settingsBtn) {
       settingsBtn.addEventListener("click", async () => {
+        if (currentSettingsPanel) {
+          currentSettingsPanel.close();
+          currentSettingsPanel = null;
+          return;
+        }
         try {
           const currentSettings = await (0, import_api.getSettings)();
-          const { el: panelEl } = (0, import_settings.openSettings)({
+          const { el: panelEl, close } = (0, import_settings.openSettings)({
             current: currentSettings,
             onRestartPolling: (newInterval) => {
               restartPolling(newInterval);
             },
             onToggleHud: (show) => {
               hud.setVisible(show);
+            },
+            onClose: () => {
+              currentSettingsPanel = null;
             }
           });
           sidebarEl.insertBefore(panelEl, sidebarEl.querySelector(".pm-group-head"));
+          currentSettingsPanel = { close };
         } catch (err) {
           console.error("Failed to open settings:", err);
           alert("Failed to load settings: " + err.message);
@@ -886,6 +913,14 @@
       });
     }
     start();
+    if (RED.events && RED.events.on) {
+      try {
+        RED.events.on("shutdown", () => {
+          stop();
+        });
+      } catch (err) {
+      }
+    }
   })();
 })();
 

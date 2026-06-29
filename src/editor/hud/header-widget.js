@@ -1,6 +1,9 @@
 'use strict';
 const { formatBytes } = require('../format');
 
+// Shared peakRss across all HUD instances
+let globalPeakRss = 0;
+
 function initHud() {
   // Feature-detect: check for NR5 header and mount point
   const header = document.getElementById('red-ui-header');
@@ -18,6 +21,11 @@ function initHud() {
   // Idempotent: check if HUD already exists
   let hudEl = document.getElementById('pm-hud');
   if (hudEl) {
+    // Restore peakRss from data attribute if it exists
+    const peakRssData = hudEl.getAttribute('data-peak-rss');
+    if (peakRssData) {
+      globalPeakRss = parseInt(peakRssData, 10);
+    }
     return createHudInterface(hudEl);
   }
 
@@ -25,23 +33,34 @@ function initHud() {
   hudEl = document.createElement('div');
   hudEl.id = 'pm-hud';
   hudEl.className = 'pm-hud';
+  hudEl.setAttribute('data-peak-rss', String(globalPeakRss));
 
   // Metrics container
   const metricsContainer = document.createElement('div');
   metricsContainer.className = 'pm-hud-metrics';
 
+  // Helper to create a metric with fill bar
+  function createMetric(label, metric) {
+    const metricEl = document.createElement('div');
+    metricEl.className = 'pm-hud-metric';
+    metricEl.setAttribute('data-metric', metric);
+    const labelEl = document.createElement('span');
+    labelEl.className = 'pm-hud-label';
+    labelEl.textContent = label;
+    const valueEl = document.createElement('span');
+    valueEl.className = 'pm-hud-value';
+    valueEl.textContent = '—';
+    const fillEl = document.createElement('div');
+    fillEl.className = 'pm-hud-fill';
+    metricEl.appendChild(fillEl);
+    metricEl.appendChild(labelEl);
+    metricEl.appendChild(valueEl);
+    return { el: metricEl, valueEl, fillEl };
+  }
+
   // CPU metric
-  const cpuMetric = document.createElement('div');
-  cpuMetric.className = 'pm-hud-metric';
-  const cpuLabel = document.createElement('span');
-  cpuLabel.className = 'pm-hud-label';
-  cpuLabel.textContent = 'CPU';
-  const cpuValue = document.createElement('span');
-  cpuValue.className = 'pm-hud-value';
-  cpuValue.textContent = '—';
-  cpuMetric.appendChild(cpuLabel);
-  cpuMetric.appendChild(cpuValue);
-  metricsContainer.appendChild(cpuMetric);
+  const cpuMetric = createMetric('CPU', 'cpu');
+  metricsContainer.appendChild(cpuMetric.el);
 
   // Separator
   const sep1 = document.createElement('div');
@@ -49,17 +68,8 @@ function initHud() {
   metricsContainer.appendChild(sep1);
 
   // RSS metric
-  const rssMetric = document.createElement('div');
-  rssMetric.className = 'pm-hud-metric';
-  const rssLabel = document.createElement('span');
-  rssLabel.className = 'pm-hud-label';
-  rssLabel.textContent = 'RSS';
-  const rssValue = document.createElement('span');
-  rssValue.className = 'pm-hud-value';
-  rssValue.textContent = '—';
-  rssMetric.appendChild(rssLabel);
-  rssMetric.appendChild(rssValue);
-  metricsContainer.appendChild(rssMetric);
+  const rssMetric = createMetric('RSS', 'rss');
+  metricsContainer.appendChild(rssMetric.el);
 
   // Separator
   const sep2 = document.createElement('div');
@@ -67,26 +77,18 @@ function initHud() {
   metricsContainer.appendChild(sep2);
 
   // Lag metric
-  const lagMetric = document.createElement('div');
-  lagMetric.className = 'pm-hud-metric';
-  const lagLabel = document.createElement('span');
-  lagLabel.className = 'pm-hud-label';
-  lagLabel.textContent = 'LAG';
-  const lagValue = document.createElement('span');
-  lagValue.className = 'pm-hud-value';
-  lagValue.textContent = '—';
-  lagMetric.appendChild(lagLabel);
-  lagMetric.appendChild(lagValue);
-  metricsContainer.appendChild(lagMetric);
+  const lagMetric = createMetric('LAG', 'lag');
+  metricsContainer.appendChild(lagMetric.el);
 
   // Separator
   const sep3 = document.createElement('div');
   sep3.className = 'pm-hud-separator';
   metricsContainer.appendChild(sep3);
 
-  // Peak RSS metric
+  // Peak RSS metric (no fill bar for peak since it is always 100%)
   const peakMetric = document.createElement('div');
   peakMetric.className = 'pm-hud-metric';
+  peakMetric.setAttribute('data-metric', 'peak');
   const peakLabel = document.createElement('span');
   peakLabel.className = 'pm-hud-label';
   peakLabel.textContent = 'PEAK';
@@ -102,30 +104,40 @@ function initHud() {
   // Insert into header just before toolbar
   header.insertBefore(hudEl, toolbar);
 
-  // Track peak RSS across updates
-  let peakRss = 0;
-
   return {
     update(stats) {
       if (!stats) return;
 
       // CPU %
       const cpu = stats.nodeRed?.cpu?.percentage ?? 0;
-      cpuValue.textContent = cpu.toFixed(1) + '%';
+      cpuMetric.valueEl.textContent = cpu.toFixed(1) + '%';
+      const cpuFill = Math.min(cpu, 100);
+      cpuMetric.fillEl.style.width = cpuFill + '%';
 
       // RSS in MB/GB
       const rss = stats.nodeRed?.memory?.rss ?? 0;
-      rssValue.textContent = formatBytes(rss);
+      rssMetric.valueEl.textContent = formatBytes(rss);
 
-      // Track peak RSS
-      if (rss > peakRss) {
-        peakRss = rss;
+      // Track peak RSS (globally)
+      if (rss > globalPeakRss) {
+        globalPeakRss = rss;
+        hudEl.setAttribute('data-peak-rss', String(globalPeakRss));
       }
-      peakValue.textContent = formatBytes(peakRss);
+
+      // RSS fill bar: rss / peak * 100
+      const rssFill = globalPeakRss > 0 ? Math.min((rss / globalPeakRss) * 100, 100) : 0;
+      rssMetric.fillEl.style.width = rssFill + '%';
+
+      const peakValue = peakMetric.querySelector('.pm-hud-value');
+      peakValue.textContent = formatBytes(globalPeakRss);
 
       // Event-loop lag in ms
       const lag = stats.nodeRed?.eventLoop?.lagMs ?? 0;
-      lagValue.textContent = lag.toFixed(0) + ' ms';
+      lagMetric.valueEl.textContent = lag.toFixed(0) + ' ms';
+
+      // Lag fill bar: lag / 50ms * 100 (50ms = full)
+      const lagFill = Math.min((lag / 50) * 100, 100);
+      lagMetric.fillEl.style.width = lagFill + '%';
     },
 
     setVisible(visible) {
@@ -141,38 +153,61 @@ function initHud() {
 }
 
 function createHudInterface(hudEl) {
-  // Return interface for existing HUD element
-  let peakRss = 0;
+  // Return interface for existing HUD element (reused on re-init)
+  // Uses data-metric attributes to select elements reliably
 
   return {
     update(stats) {
       if (!stats) return;
 
-      const cpuValue = hudEl.querySelector('.pm-hud-metric:nth-child(1) .pm-hud-value');
-      const rssValue = hudEl.querySelector('.pm-hud-metric:nth-child(3) .pm-hud-value');
-      const lagValue = hudEl.querySelector('.pm-hud-metric:nth-child(5) .pm-hud-value');
-      const peakValue = hudEl.querySelector('.pm-hud-metric:nth-child(7) .pm-hud-value');
+      // Select elements by data-metric attribute
+      const cpuMetricEl = hudEl.querySelector('[data-metric="cpu"]');
+      const rssMetricEl = hudEl.querySelector('[data-metric="rss"]');
+      const lagMetricEl = hudEl.querySelector('[data-metric="lag"]');
+      const peakMetricEl = hudEl.querySelector('[data-metric="peak"]');
 
-      if (cpuValue) {
+      // CPU %
+      if (cpuMetricEl) {
+        const cpuValue = cpuMetricEl.querySelector('.pm-hud-value');
+        const cpuFill = cpuMetricEl.querySelector('.pm-hud-fill');
         const cpu = stats.nodeRed?.cpu?.percentage ?? 0;
-        cpuValue.textContent = cpu.toFixed(1) + '%';
+        if (cpuValue) cpuValue.textContent = cpu.toFixed(1) + '%';
+        if (cpuFill) cpuFill.style.width = Math.min(cpu, 100) + '%';
       }
 
-      if (rssValue) {
+      // RSS in MB/GB
+      if (rssMetricEl) {
+        const rssValue = rssMetricEl.querySelector('.pm-hud-value');
+        const rssFill = rssMetricEl.querySelector('.pm-hud-fill');
         const rss = stats.nodeRed?.memory?.rss ?? 0;
-        rssValue.textContent = formatBytes(rss);
-        if (rss > peakRss) {
-          peakRss = rss;
+        if (rssValue) rssValue.textContent = formatBytes(rss);
+
+        // Track peak RSS globally
+        if (rss > globalPeakRss) {
+          globalPeakRss = rss;
+          hudEl.setAttribute('data-peak-rss', String(globalPeakRss));
+        }
+
+        // RSS fill: rss / peak * 100
+        if (rssFill) {
+          const rssFillPct = globalPeakRss > 0 ? Math.min((rss / globalPeakRss) * 100, 100) : 0;
+          rssFill.style.width = rssFillPct + '%';
         }
       }
 
-      if (peakValue) {
-        peakValue.textContent = formatBytes(peakRss);
+      // Peak RSS
+      if (peakMetricEl) {
+        const peakValue = peakMetricEl.querySelector('.pm-hud-value');
+        if (peakValue) peakValue.textContent = formatBytes(globalPeakRss);
       }
 
-      if (lagValue) {
+      // Event-loop lag in ms
+      if (lagMetricEl) {
+        const lagValue = lagMetricEl.querySelector('.pm-hud-value');
+        const lagFill = lagMetricEl.querySelector('.pm-hud-fill');
         const lag = stats.nodeRed?.eventLoop?.lagMs ?? 0;
-        lagValue.textContent = lag.toFixed(0) + ' ms';
+        if (lagValue) lagValue.textContent = lag.toFixed(0) + ' ms';
+        if (lagFill) lagFill.style.width = Math.min((lag / 50) * 100, 100) + '%';
       }
     },
 

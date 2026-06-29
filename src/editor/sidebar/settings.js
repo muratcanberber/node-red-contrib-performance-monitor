@@ -11,10 +11,11 @@ const { getSettings, saveSettings } = require('../api');
  * @param {Object} opts.current - Current settings from server
  * @param {Function} opts.onRestartPolling - Callback to restart poll timer with new interval
  * @param {Function} opts.onToggleHud - Callback to toggle HUD visibility (hideHud: boolean)
+ * @param {Function} opts.onClose - Callback fired when panel closes (any path: X, Cancel, Save)
  * @returns {Object} { el: HTMLElement, close: Function }
  */
 function openSettings(opts = {}) {
-  const { current = {}, onRestartPolling, onToggleHud } = opts;
+  const { current = {}, onRestartPolling, onToggleHud, onClose } = opts;
 
   // Create container (will be inserted into sidebar by caller)
   const panelEl = document.createElement('div');
@@ -129,6 +130,9 @@ function openSettings(opts = {}) {
   const close = () => {
     if (panelEl.parentElement) {
       panelEl.parentElement.removeChild(panelEl);
+    }
+    if (onClose) {
+      onClose();
     }
   };
 

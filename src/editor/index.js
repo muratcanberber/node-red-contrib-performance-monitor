@@ -29,14 +29,24 @@ import { openSettings } from './sidebar/settings';
   const hud = initHud();
   registerExternalUpdater((stats) => hud.update(stats));
 
+  // Settings panel toggle state: track the currently open panel/close function
+  let currentSettingsPanel = null;
+
   // Wire settings button via exposed settingsBtn in sidebar DOM
   // Find the settings button in the toolbar and attach click handler
   const settingsBtn = sidebarEl.querySelector('.pm-toolbar-btn:last-child');
   if (settingsBtn) {
     settingsBtn.addEventListener('click', async () => {
+      // Toggle: if a panel is open, close it and return
+      if (currentSettingsPanel) {
+        currentSettingsPanel.close();
+        currentSettingsPanel = null;
+        return;
+      }
+
       try {
         const currentSettings = await getSettings();
-        const { el: panelEl } = openSettings({
+        const { el: panelEl, close } = openSettings({
           current: currentSettings,
           onRestartPolling: (newInterval) => {
             restartPolling(newInterval);
@@ -44,8 +54,12 @@ import { openSettings } from './sidebar/settings';
           onToggleHud: (show) => {
             hud.setVisible(show);
           },
+          onClose: () => {
+            currentSettingsPanel = null;
+          },
         });
         sidebarEl.insertBefore(panelEl, sidebarEl.querySelector('.pm-group-head'));
+        currentSettingsPanel = { close };
       } catch (err) {
         console.error('Failed to open settings:', err);
         alert('Failed to load settings: ' + err.message);
@@ -57,6 +71,17 @@ import { openSettings } from './sidebar/settings';
   // Note: RED.sidebar.addTab does not expose a visibility change API in Node-RED 5,
   // so we keep polling continuously. This is the simplest working approach.
   start();
+
+  // Wire cleanup on unload to stop polling
+  if (RED.events && RED.events.on) {
+    try {
+      RED.events.on('shutdown', () => {
+        stop();
+      });
+    } catch (err) {
+      // Event may not exist; silently continue
+    }
+  }
 
   // Optional: if the tab object later exposes onchange/onshow, we can wire it here.
   // For now, polling runs continuously (acceptable for a monitoring tool).
