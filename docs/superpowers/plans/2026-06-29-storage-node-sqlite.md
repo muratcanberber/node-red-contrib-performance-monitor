@@ -25,6 +25,8 @@ Isolate every node:sqlite-specific call (which differs from better-sqlite3) behi
 
 **Files:**
 - Create: `lib/storage/sqlite-engine.js`
+- Create: `test-setup.js` (mocha warning filter)
+- Create: `.mocharc.json` (loads the setup)
 - Test: `test/sqlite-engine.test.js`
 
 **Interfaces:**
@@ -32,6 +34,13 @@ Isolate every node:sqlite-specific call (which differs from better-sqlite3) behi
   - `isAvailable(): boolean` — true if `node:sqlite` can be required (no flag needed).
   - `openDatabase(dbPath: string): DatabaseSync` — opens with WAL + NORMAL + incremental auto_vacuum pragmas applied. Throws if the path can't be opened.
   - `makeTx(db): (fn: () => void) => void` — returns a function that runs `fn` inside `BEGIN`/`COMMIT`, rolling back and rethrowing on error.
+
+**Note on the ExperimentalWarning:** requiring `node:sqlite` makes Node emit a one-time
+`ExperimentalWarning: SQLite is an experimental feature`. We do **not** suppress this at
+runtime (it is honest — SQLite is experimental on Node 22–23). But it pollutes test
+output, so the test harness filters **only** this specific warning. Other warnings still
+surface. Steps 5–7 below add that filter before the first commit so all later task runs
+have pristine output.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -148,16 +157,52 @@ function makeTx(db) {
 module.exports = { isAvailable, openDatabase, makeTx };
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: Run test to verify it passes (note the warning in output)**
 
 Run: `npx mocha test/sqlite-engine.test.js`
-Expected: PASS (4 passing).
+Expected: PASS (4 passing). The output also contains a line like
+`(node:NNNNN) ExperimentalWarning: SQLite is an experimental feature...` — this is the
+noise the next steps remove.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Add the test warning filter**
+
+```javascript
+// test-setup.js
+// Mocha setup: silence ONLY the node:sqlite experimental warning so test output
+// is pristine. All other process warnings still surface. The runtime does not
+// filter this warning — it is intentionally visible in Node-RED logs.
+'use strict';
+const originalEmit = process.emitWarning;
+process.emitWarning = function (warning, ...args) {
+    const message = typeof warning === 'string' ? warning : (warning && warning.message) || '';
+    const type = args[0] && typeof args[0] === 'object' ? args[0].type : args[0];
+    if (type === 'ExperimentalWarning' && /SQLite is an experimental feature/i.test(message)) {
+        return;
+    }
+    return originalEmit.call(process, warning, ...args);
+};
+```
+
+```json
+// .mocharc.json
+{
+  "require": "./test-setup.js",
+  "spec": "test/**/*.js",
+  "timeout": 10000
+}
+```
+
+- [ ] **Step 6: Verify the suite output is now pristine**
+
+Run: `npx mocha`
+Expected: tests pass and the output no longer contains `ExperimentalWarning: SQLite`.
+(`npx mocha` with no args now uses `.mocharc.json`'s `spec` and `require`.)
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add lib/storage/sqlite-engine.js test/sqlite-engine.test.js
-git commit -m "feat(storage): add node:sqlite engine adapter"
+git add lib/storage/sqlite-engine.js test/sqlite-engine.test.js test-setup.js .mocharc.json
+git commit -m "feat(storage): add node:sqlite engine adapter + pristine test output"
 ```
 
 ---
