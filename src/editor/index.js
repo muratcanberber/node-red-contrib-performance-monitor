@@ -1,5 +1,6 @@
 import css from './styles.css';
 import { buildSidebar } from './sidebar/sidebar';
+import { initHud } from './hud/header-widget';
 
 (function () {
   'use strict';
@@ -7,7 +8,7 @@ import { buildSidebar } from './sidebar/sidebar';
   styleEl.textContent = css;
   document.head.appendChild(styleEl);
 
-  const { el: sidebarEl, start, stop } = buildSidebar();
+  const { el: sidebarEl, start, stop, registerExternalUpdater } = buildSidebar();
 
   RED.plugins.registerPlugin('performance-monitor', {
     type: 'performance-monitor',
@@ -20,6 +21,11 @@ import { buildSidebar } from './sidebar/sidebar';
     iconClass: 'fa fa-tachometer',
     content: sidebarEl,
   });
+
+  // Initialize HUD and register it as an external updater
+  // This feeds the HUD from the same poll loop as the sidebar
+  const hud = initHud();
+  registerExternalUpdater((stats) => hud.update(stats));
 
   // Start polling immediately; it will run as long as the page is open.
   // Note: RED.sidebar.addTab does not expose a visibility change API in Node-RED 5,

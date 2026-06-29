@@ -230,3 +230,53 @@
   border-radius: 2px;
   overflow: hidden;
 }
+
+/* ===== Header HUD ===== */
+.pm-hud {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 100%;
+  padding: 0 8px;
+  color: var(--red-ui-primary-text-color, #333);
+  font-size: 11px;
+}
+
+.pm-hud-metrics {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 100%;
+}
+
+.pm-hud-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+.pm-hud-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--red-ui-tertiary-text-color, #999);
+}
+
+.pm-hud-value {
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--red-ui-primary-text-color, #333);
+}
+
+.pm-hud-separator {
+  width: 1px;
+  height: 16px;
+  background: var(--red-ui-tertiary-border-color, #ddd);
+  margin: 0 4px;
+}

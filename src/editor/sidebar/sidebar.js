@@ -11,6 +11,7 @@ function buildSidebar() {
   let pollingInterval = null;
   let isPaused = false;
   const rows = []; // Array of { section, row }
+  const externalUpdaters = []; // Array of update functions from external consumers (HUD, etc)
 
   // ===== Toolbar =====
   const toolbar = document.createElement('div');
@@ -55,6 +56,7 @@ function buildSidebar() {
     getStats()
       .then((stats) => {
         rows.forEach(({ row }) => row.update(stats));
+        externalUpdaters.forEach(fn => fn(stats));
         statusEl.className = 'pm-status pm-status-online';
         statusLabel.textContent = 'ONLINE';
       })
@@ -120,6 +122,7 @@ function buildSidebar() {
       getStats()
         .then((stats) => {
           rows.forEach(({ row }) => row.update(stats));
+          externalUpdaters.forEach(fn => fn(stats));
           statusEl.className = 'pm-status pm-status-online';
           statusLabel.textContent = 'ONLINE';
         })
@@ -145,10 +148,15 @@ function buildSidebar() {
     }
   }
 
+  function registerExternalUpdater(fn) {
+    externalUpdaters.push(fn);
+  }
+
   return {
     el: root,
     start,
     stop,
+    registerExternalUpdater,
   };
 }
 
