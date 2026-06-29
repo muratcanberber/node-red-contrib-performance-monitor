@@ -304,6 +304,35 @@ describe('MetricsStore events', function () {
     });
 });
 
+describe('MetricsStore degraded reads never throw', function () {
+    let store;
+    beforeEach(function () {
+        store = new MetricsStore({ dbPath: '/nope/does/not/exist/pm.db' });
+        store.openOrDegrade();
+    });
+    afterEach(function () { store.close(); });
+
+    it('is degraded', function () {
+        assert.strictEqual(store.isDegraded(), true);
+    });
+
+    it('read methods return safe empties instead of throwing', function () {
+        const now = Date.now();
+        assert.deepStrictEqual(store.getRange(now - 1000, now), []);
+        assert.deepStrictEqual(store.getRange(now - 1000, now, { bucketMs: 1000 }), []);
+        assert.deepStrictEqual(store.getNodeStats('n1', now - 1000, now), []);
+        assert.deepStrictEqual(store.getTopNodes(now - 1000, now, { metric: 'msg_count' }), []);
+        assert.deepStrictEqual(store.getEvents(now - 1000, now), []);
+        assert.deepStrictEqual(store.getSummary(1000), {});
+        assert.deepStrictEqual(store.getAlarmRules(), []);
+    });
+
+    it('runRetention is a no-op in degraded mode', function () {
+        const r = store.runRetention();
+        assert.deepStrictEqual(r, { deletedSamples: 0, deletedNodeSamples: 0, deletedEvents: 0, cutoff: r.cutoff });
+    });
+});
+
 function baseSystem(ts) {
     return {
         ts, proc_cpu_pct: 0, proc_rss: 0, proc_heap_used: 0, proc_heap_total: 0,
