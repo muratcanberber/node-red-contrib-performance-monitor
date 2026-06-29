@@ -328,8 +328,12 @@ describe('MetricsStore degraded reads never throw', function () {
     });
 
     it('runRetention is a no-op in degraded mode', function () {
+        const seen = [];
+        store.on('retention', e => seen.push(e));
         const r = store.runRetention();
         assert.deepStrictEqual(r, { deletedSamples: 0, deletedNodeSamples: 0, deletedEvents: 0, cutoff: r.cutoff });
+        assert.strictEqual(seen.length, 1, 'retention event must be emitted');
+        assert.deepStrictEqual(seen[0], r, 'event payload must match return value');
     });
 });
 
