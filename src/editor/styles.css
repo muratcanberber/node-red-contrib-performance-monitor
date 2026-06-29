@@ -1,1 +1,138 @@
 .pm-root { padding: 8px; color: var(--red-ui-primary-text-color, #333); font-size: 12px; }
+
+/* Metric row structure */
+.pm-row {
+  position: relative;
+  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);
+}
+
+/* Row header button */
+.pm-row-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  background: none;
+  border: 0;
+  width: 100%;
+  cursor: pointer;
+  color: var(--red-ui-primary-text-color);
+  font-size: 12px;
+  font-family: inherit;
+  text-align: left;
+}
+
+.pm-row-head:hover {
+  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));
+}
+
+.pm-row-head:active {
+  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.05));
+}
+
+/* Icon styling */
+.pm-row-head .fa {
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  color: var(--red-ui-secondary-text-color);
+}
+
+/* Label styling */
+.pm-row-head .pm-label {
+  flex: 1;
+  text-align: left;
+  color: var(--red-ui-secondary-text-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Value styling with tabular numbers for alignment */
+.pm-row-head .pm-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--red-ui-primary-text-color);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Fill bar (status indicator) */
+.pm-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  width: 0;
+  background: var(--red-ui-text-color-link);
+  transition: width 0.2s ease, background-color 0.2s ease;
+}
+
+/* Status color classes */
+.pm-fill.pm-ok {
+  background: var(--red-ui-text-color-success, #3a3);
+}
+
+.pm-fill.pm-warn {
+  background: var(--red-ui-secondary-border-color, #f0ad4e);
+}
+
+.pm-fill.pm-crit {
+  background: var(--red-ui-text-color-error, #c33);
+}
+
+/* Detail panel (collapsed by default) */
+.pm-detail {
+  display: none;
+  padding: 4px 8px 8px 24px;
+  color: var(--red-ui-primary-text-color);
+  font-size: 11px;
+}
+
+/* Show detail when row is open */
+.pm-open .pm-detail {
+  display: block;
+}
+
+/* Detail grid layout for label-value pairs */
+.pm-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+  margin-bottom: 8px;
+}
+
+.pm-detail-label {
+  color: var(--red-ui-tertiary-text-color);
+  font-weight: 500;
+}
+
+.pm-detail-value {
+  color: var(--red-ui-primary-text-color);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Sparkline container */
+.pm-sparkline-container {
+  margin-top: 8px;
+  border-top: 1px solid var(--red-ui-tertiary-border-color, #eee);
+  padding-top: 8px;
+}
+
+.pm-spark {
+  width: 100%;
+  height: auto;
+  max-width: 100px;
+  display: inline-block;
+}
+
+/* Group headers (for future use in list context) */
+.pm-group-head {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--red-ui-tertiary-text-color);
+  padding: 6px 8px 2px;
+  font-weight: 600;
+}
