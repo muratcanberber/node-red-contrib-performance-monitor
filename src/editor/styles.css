@@ -1,0 +1,434 @@
+.pm-root { padding: 8px; color: var(--red-ui-primary-text-color, #333); font-size: 12px; }
+
+/* Sidebar container */
+.pm-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  color: var(--red-ui-primary-text-color);
+  font-size: 12px;
+}
+
+/* Toolbar at top */
+.pm-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);
+  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));
+  flex-shrink: 0;
+}
+
+/* Toolbar buttons */
+.pm-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: var(--red-ui-secondary-text-color);
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color 0.15s ease;
+}
+
+.pm-toolbar-btn:hover {
+  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.05));
+}
+
+.pm-toolbar-btn:active {
+  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.1));
+}
+
+.pm-toolbar-btn.pm-paused {
+  color: var(--red-ui-text-color-warning, #ff9800);
+}
+
+/* Status indicator */
+.pm-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+  letter-spacing: 0.05em;
+  color: var(--red-ui-secondary-text-color, #666);
+}
+
+.pm-status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.pm-status-label {
+  white-space: nowrap;
+}
+
+.pm-status-online .pm-status-dot {
+  background: var(--red-ui-text-color-success, #5a5);
+}
+
+.pm-status-offline .pm-status-dot {
+  background: var(--red-ui-text-color-error, #c33);
+}
+
+/* Metric row structure */
+.pm-row {
+  position: relative;
+  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);
+}
+
+/* Row header button */
+.pm-row-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  background: none;
+  border: 0;
+  width: 100%;
+  cursor: pointer;
+  color: var(--red-ui-primary-text-color);
+  font-size: 12px;
+  font-family: inherit;
+  text-align: left;
+}
+
+.pm-row-head:hover {
+  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));
+}
+
+.pm-row-head:active {
+  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.05));
+}
+
+/* Icon styling */
+.pm-row-head .fa {
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  color: var(--red-ui-secondary-text-color);
+}
+
+/* Label styling */
+.pm-row-head .pm-label {
+  flex: 1;
+  text-align: left;
+  color: var(--red-ui-secondary-text-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Value styling with tabular numbers for alignment */
+.pm-row-head .pm-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--red-ui-primary-text-color);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Fill bar (status indicator) */
+.pm-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  width: 0;
+  background: var(--red-ui-text-color-link);
+  transition: width 0.2s ease, background-color 0.2s ease;
+}
+
+/* Status color classes */
+.pm-fill.pm-ok {
+  background: var(--red-ui-text-color-success, #3a3);
+}
+
+.pm-fill.pm-warn {
+  background: var(--red-ui-secondary-border-color, #f0ad4e);
+}
+
+.pm-fill.pm-crit {
+  background: var(--red-ui-text-color-error, #c33);
+}
+
+/* Detail panel (collapsed by default) */
+.pm-detail {
+  display: none;
+  padding: 4px 8px 8px 24px;
+  color: var(--red-ui-primary-text-color);
+  font-size: 11px;
+}
+
+/* Show detail when row is open */
+.pm-open .pm-detail {
+  display: block;
+}
+
+/* Detail grid layout for label-value pairs */
+.pm-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+  margin-bottom: 8px;
+}
+
+.pm-detail-label {
+  color: var(--red-ui-tertiary-text-color);
+  font-weight: 500;
+}
+
+.pm-detail-value {
+  color: var(--red-ui-primary-text-color);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Sparkline container */
+.pm-sparkline-container {
+  margin-top: 8px;
+  border-top: 1px solid var(--red-ui-tertiary-border-color, #eee);
+  padding-top: 8px;
+}
+
+.pm-spark {
+  width: 100%;
+  height: auto;
+  max-width: 100px;
+  display: inline-block;
+}
+
+/* Group headers */
+.pm-group-head {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--red-ui-tertiary-text-color);
+  padding: 6px 8px 2px;
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.pm-group-head:first-child {
+  margin-top: 0;
+}
+
+/* Group container */
+.pm-group {
+  border: 1px solid var(--red-ui-tertiary-border-color, #eee);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+/* ===== Header HUD ===== */
+.pm-hud {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 100%;
+  padding: 0 8px;
+  color: var(--red-ui-primary-text-color, #333);
+  font-size: 11px;
+}
+
+.pm-hud-metrics {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 100%;
+}
+
+.pm-hud-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 6px;
+  white-space: nowrap;
+  position: relative;
+}
+
+.pm-hud-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--red-ui-tertiary-text-color, #999);
+}
+
+.pm-hud-value {
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--red-ui-primary-text-color, #333);
+}
+
+.pm-hud-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  width: 0;
+  background: var(--red-ui-text-color-link, #0084ff);
+  transition: width 0.6s ease;
+  opacity: 0.6;
+  border-radius: 1px;
+}
+
+.pm-hud-separator {
+  width: 1px;
+  height: 16px;
+  background: var(--red-ui-tertiary-border-color, #ddd);
+  margin: 0 4px;
+}
+
+/* ===== Settings Panel ===== */
+.pm-settings-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);
+  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));
+}
+
+.pm-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+
+.pm-settings-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--red-ui-primary-text-color);
+  margin: 0;
+  padding: 0;
+}
+
+.pm-settings-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: var(--red-ui-secondary-text-color);
+  cursor: pointer;
+  font-size: 11px;
+  transition: background-color 0.15s ease;
+}
+
+.pm-settings-close:hover {
+  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.05));
+}
+
+.pm-settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pm-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pm-settings-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--red-ui-secondary-text-color);
+  display: block;
+}
+
+.pm-settings-input {
+  padding: 4px 6px;
+  font-size: 11px;
+  border: 1px solid var(--red-ui-tertiary-border-color, #ccc);
+  border-radius: 2px;
+  background: var(--red-ui-primary-background, #fff);
+  color: var(--red-ui-primary-text-color);
+  font-family: inherit;
+}
+
+.pm-settings-input:focus {
+  outline: none;
+  border-color: var(--red-ui-text-color-link, #0084ff);
+  box-shadow: 0 0 0 2px var(--red-ui-text-color-link, rgba(0, 132, 255, 0.1));
+}
+
+/* Checkbox field layout */
+.pm-settings-checkbox-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.pm-settings-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--red-ui-text-color-link, #0084ff);
+}
+
+.pm-settings-checkbox-label {
+  font-size: 11px;
+  color: var(--red-ui-primary-text-color);
+  cursor: pointer;
+  user-select: none;
+}
+
+.pm-settings-buttons {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  justify-content: flex-end;
+}
+
+.pm-settings-btn {
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.pm-settings-btn-save {
+  background: var(--red-ui-text-color-link, #0084ff);
+  color: var(--red-ui-primary-background, #fff);
+}
+
+.pm-settings-btn-save:hover {
+  background: var(--red-ui-text-color-link, #0066cc);
+}
+
+.pm-settings-btn-cancel {
+  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.05));
+  color: var(--red-ui-primary-text-color);
+  border: 1px solid var(--red-ui-tertiary-border-color, #ccc);
+}
+
+.pm-settings-btn-cancel:hover {
+  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.1));
+}

@@ -24,10 +24,9 @@ module.exports = function (RED) {
 
     registerRoutes({ RED, store, collector });
 
-    // Flow node
+    // Flow node: store & collector accessed by node at registration time
     RED._store = store;
     RED._collector = collector;
-    require('./nodes/perf-monitor-node/perf-monitor-node')(RED);
 
     // Anomaly detector
     const detector = new AnomalyDetector({ store, collector, RED });

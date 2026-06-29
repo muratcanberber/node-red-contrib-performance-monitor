@@ -1,1433 +1,927 @@
-<!-- Performance Monitor Sidebar Plugin v2.1.0 -->
+<!-- Performance Monitor — built from src/editor/ by build/build.mjs. DO NOT EDIT BY HAND. -->
 <script type="text/javascript">
-    (function () {
-        'use strict';
+(() => {
+  var __create = Object.create;
+  var __defProp = Object.defineProperty;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __getProtoOf = Object.getPrototypeOf;
+  var __hasOwnProp = Object.prototype.hasOwnProperty;
+  var __commonJS = (cb, mod) => function __require() {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  };
+  var __copyProps = (to, from, except, desc) => {
+    if (from && typeof from === "object" || typeof from === "function") {
+      for (let key of __getOwnPropNames(from))
+        if (!__hasOwnProp.call(to, key) && key !== except)
+          __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+    }
+    return to;
+  };
+  var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+    // If the importer is in node compatibility mode or this is not an ESM
+    // file that has been converted to a CommonJS file using a Babel-
+    // compatible transform (i.e. "__esModule" has not been set), then set
+    // "default" to the CommonJS "module.exports" for node compatibility.
+    isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+    mod
+  ));
 
-        // Performance Monitor Sidebar Plugin v2.1.0 - Themed HUD with Tooltips
-        let settings = {
-            refreshInterval: 2000,
-            paneFontSize: 12,
-            paneFontFamily: 'Helvetica Neue',
-            hudSize: 'Normal',
-            hudTheme: 'classic',
-            hideHud: false,
-            retentionDays: 7,
-            maxDbSizeMB: 500
-        };
+  // src/editor/format.js
+  var require_format = __commonJS({
+    "src/editor/format.js"(exports, module) {
+      "use strict";
+      function formatBytes(bytes, decimals = 1) {
+        if (!bytes) return "0 B";
+        const k = 1024;
+        const sizes = ["B", "KB", "MB", "GB", "TB"];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(decimals)) + " " + sizes[i];
+      }
+      function formatUptime(seconds) {
+        const d = Math.floor(seconds / 86400);
+        const h = Math.floor(seconds % 86400 / 3600);
+        const m = Math.floor(seconds % 3600 / 60);
+        if (d > 0) return `${d}d ${h}h ${m}m`;
+        if (h > 0) return `${h}h ${m}m`;
+        return `${m}m`;
+      }
+      function statusClass(pct) {
+        return pct < 70 ? "pm-ok" : pct < 90 ? "pm-warn" : "pm-crit";
+      }
+      function lagStatusClass(ms) {
+        return ms < 10 ? "pm-ok" : ms < 50 ? "pm-warn" : "pm-crit";
+      }
+      module.exports = { formatBytes, formatUptime, statusClass, lagStatusClass };
+    }
+  });
 
-        let pollTimer = null;
-        let isPaused = false;
-
-        // HUD Theme Definitions - All inherit Node-RED base theme
-        const hudThemes = {
-            classic: {
-                name: 'Classic',
-                description: 'Sleek, minimal design that blends with Node-RED',
-                icon: '◈',
-                styles: {
-                    background: 'var(--red-ui-secondary-background, rgba(255,255,255,0.95))',
-                    border: 'var(--red-ui-secondary-border-color, #ccc)',
-                    text: 'var(--red-ui-text-color-primary, #333)',
-                    accent: 'var(--red-ui-text-color-link, #0066cc)',
-                    shadow: '0 2px 8px rgba(0,0,0,0.1)',
-                    iconFilter: 'none',
-                    fontWeight: '500'
-                }
-            },
-            funky: {
-                name: 'Funky',
-                description: 'Energetic, playful design with vibrant icons',
-                icon: '🎨',
-                styles: {
-                    background: 'linear-gradient(135deg, var(--red-ui-secondary-background, #fff) 0%, var(--red-ui-tertiary-background, #f0f0f0) 100%)',
-                    border: 'var(--red-ui-text-color-link, #0066cc)',
-                    text: 'var(--red-ui-text-color-primary, #333)',
-                    accent: '#ff6b6b',
-                    shadow: '0 4px 15px rgba(255,107,107,0.2)',
-                    iconFilter: 'hue-rotate(330deg) saturate(1.5)',
-                    fontWeight: '600',
-                    borderRadius: '12px'
-                }
-            },
-            matrix: {
-                name: 'Matrix',
-                description: 'Green terminal aesthetic inspired by the Matrix',
-                icon: '💻',
-                styles: {
-                    background: 'linear-gradient(180deg, rgba(10,25,10,0.98) 0%, rgba(5,15,5,0.99) 100%)',
-                    border: '#33cc55',
-                    text: '#44dd66',
-                    accent: '#33cc55',
-                    shadow: '0 2px 10px rgba(0,180,60,0.15)',
-                    iconFilter: 'none',
-                    fontWeight: '500',
-                    fontFamily: '"Courier New", "Monaco", monospace',
-                    textShadow: 'none'
-                }
-            },
-            neon: {
-                name: 'Neon Cyberpunk',
-                description: 'Futuristic neon style with cyberpunk vibes',
-                icon: '⚡',
-                styles: {
-                    background: 'linear-gradient(135deg, rgba(25,10,45,0.98) 0%, rgba(35,15,55,0.99) 100%)',
-                    border: '#cc66ff',
-                    text: '#66ddff',
-                    accent: '#cc66ff',
-                    shadow: '0 2px 12px rgba(180,80,220,0.2)',
-                    iconFilter: 'none',
-                    fontWeight: '500',
-                    textShadow: 'none'
-                }
-            }
-        };
-
-        // Metric Tooltips - Brief explanations
-        const metricTooltips = {
-            cpu: {
-                title: 'CPU Usage',
-                description: 'Percentage of CPU time used by the Node-RED process. High values (>70%) may indicate heavy flow processing or infinite loops.',
-                good: '< 30%',
-                warn: '30-70%',
-                crit: '> 70%'
-            },
-            memory: {
-                title: 'Memory (RSS)',
-                description: 'Resident Set Size - actual RAM used by Node-RED. Includes heap, stack, and code. Steadily rising values may indicate a memory leak.',
-                good: 'Stable',
-                warn: 'Rising slowly',
-                crit: 'Rising fast'
-            },
-            lag: {
-                title: 'Event Loop Lag',
-                description: 'Time between scheduling a task and its execution. High lag means the event loop is blocked, causing slow response times.',
-                good: '< 10ms',
-                warn: '10-50ms',
-                crit: '> 50ms'
-            },
-            peak: {
-                title: 'Session Peak RAM',
-                description: 'Highest memory usage since Node-RED started. Useful for identifying memory spikes. Pulsing indicates potential memory leak.',
-                tip: 'Click to reset'
-            }
-        };
-
-        // Session Peak Tracker
-        const sessionRec = {
-            peakRam: 0,
-            historyRam: [],
-            isLeaking: false
-        };
-
-        // History for Sparklines (last 20 points)
-        const history = {
-            cpu: new Array(20).fill(0),
-            memory: new Array(20).fill(0),
-            lag: new Array(50).fill(0),
-            sysCpu: new Array(50).fill(0),
-            sysRam: new Array(50).fill(0),
-            sysDisk: new Array(50).fill(0)
-        };
-
-        // Helper: Format bytes
-        function formatBytes(bytes, decimals = 1) {
-            if (bytes === 0) return '0 B';
-            const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(decimals)) + ' ' + sizes[i];
-        }
-
-        // Helper: Format duration
-        function formatUptime(seconds) {
-            const days = Math.floor(seconds / 86400);
-            const hours = Math.floor((seconds % 86400) / 3600);
-            const mins = Math.floor((seconds % 3600) / 60);
-            if (days > 0) return `${days}d ${hours}h ${mins}m`;
-            if (hours > 0) return `${hours}h ${mins}m`;
-            return `${mins}m`;
-        }
-
-        // Helper: Get status class based on thresholds
-        function getStatusClass(percent) {
-            if (percent < 70) return 'pm-status-good';
-            if (percent < 90) return 'pm-status-warn';
-            return 'pm-status-crit';
-        }
-
-        // Helper: Get lag status class
-        function getLagStatusClass(lagMs) {
-            if (lagMs < 10) return 'pm-status-good';
-            if (lagMs < 50) return 'pm-status-warn';
-            return 'pm-status-crit';
-        }
-
-        // Sparkline Generator
-        // Sparkline Generator with Axes
-        function generateSparkline(dataPoints, width = 100, height = 35, colorVar = '--red-ui-text-color-link') {
-            const max = Math.max(...dataPoints, 1);
-            // Reserve left 25px for Y-axis labels, bottom 10px for X-axis
-            const chartW = width - 25;
-            const chartH = height - 10;
-            const step = chartW / (dataPoints.length > 1 ? dataPoints.length - 1 : 1);
-
-            const points = dataPoints.map((val, i) => {
-                const x = 25 + (i * step);
-                const y = chartH - (val / max * chartH);
-                return `${x},${y}`;
-            }).join(' ');
-
-            return `
-                <svg width="${width}" height="${height}" class="pm-sparkline" style="overflow:visible">
-                    <!-- Axes -->
-                    <line x1="25" y1="0" x2="25" y2="${chartH}" stroke="var(--red-ui-secondary-border-color, #ccc)" stroke-width="1" shape-rendering="crispEdges"/>
-                    <line x1="25" y1="${chartH}" x2="${width}" y2="${chartH}" stroke="var(--red-ui-secondary-border-color, #ccc)" stroke-width="1" shape-rendering="crispEdges"/>
-                    
-                    <!-- Line -->
-                    <polyline points="${points}" fill="none" stroke="var(${colorVar})" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    
-                    <!-- Labels -->
-                    <text x="22" y="8" text-anchor="end" font-size="8" fill="var(--red-ui-text-color-secondary, #888)">${Math.round(max)}</text>
-                    <text x="22" y="${chartH}" text-anchor="end" font-size="8" fill="var(--red-ui-text-color-secondary, #888)">0</text>
-                </svg>
-            `;
-        }
-
-        // Tooltips removed for cleaner UI
-        function createTooltip(metric) {
-            return '';
-        }
-
-        // Apply HUD theme
-        function applyHudTheme() {
-            const widget = document.getElementById('pm-header-widget');
-            if (!widget) return;
-
-            const theme = hudThemes[settings.hudTheme] || hudThemes.classic;
-            const s = theme.styles;
-
-            widget.style.background = s.background;
-            widget.style.borderColor = s.border;
-            widget.style.color = s.text;
-            widget.style.boxShadow = s.shadow;
-            widget.style.fontWeight = s.fontWeight || '500';
-
-            if (s.fontFamily) {
-                widget.style.fontFamily = s.fontFamily;
-            }
-            if (s.textShadow) {
-                widget.style.textShadow = s.textShadow;
-            }
-            if (s.borderRadius) {
-                widget.style.borderRadius = `0 0 ${s.borderRadius} ${s.borderRadius}`;
-            }
-            if (s.animation) {
-                widget.style.animation = s.animation;
-            } else {
-                widget.style.animation = 'none';
-            }
-
-            // Apply icon filter
-            const icons = widget.querySelectorAll('i.fa');
-            icons.forEach(icon => {
-                icon.style.filter = s.iconFilter || 'none';
-            });
-
-            // Update accent colors for bars and values
-            const accentEls = widget.querySelectorAll('.pm-rs-nr');
-            accentEls.forEach(el => {
-                el.style.background = s.accent;
-            });
-        }
-
-        function applyHudSize() {
-            const widget = document.getElementById('pm-header-widget');
-            if (!widget) return;
-
-            widget.classList.remove('pm-hud-compact', 'pm-hud-large');
-            if (settings.hudSize === 'Compact') {
-                widget.classList.add('pm-hud-compact');
-            } else if (settings.hudSize === 'Large') {
-                widget.classList.add('pm-hud-large');
-            }
-        }
-
-        // Apply custom styles from settings
-        function applyCustomStyles() {
-            const container = document.getElementById('pm-container');
-            if (!container) return;
-
-            // Calculate sizes based on hudSize
-            const sizes = {
-                'Compact': { fontSize: settings.paneFontSize - 2, padding: 6, gap: 4 },
-                'Normal': { fontSize: settings.paneFontSize, padding: 10, gap: 8 },
-                'Large': { fontSize: settings.paneFontSize + 2, padding: 14, gap: 12 }
-            };
-            const size = sizes[settings.hudSize] || sizes['Normal'];
-
-            container.style.setProperty('--pm-font-size', size.fontSize + 'px');
-            container.style.setProperty('--pm-font-family', settings.paneFontFamily);
-            container.style.setProperty('--pm-padding', size.padding + 'px');
-            container.style.setProperty('--pm-gap', size.gap + 'px');
-        }
-
-        // Toggle HUD visibility
-        function toggleHudVisibility() {
-            const widget = document.getElementById('pm-header-widget');
-            if (widget) {
-                widget.style.display = settings.hideHud ? 'none' : 'flex';
-            }
-        }
-
-        // Header Widget Injection
-        function injectHeaderWidget() {
-            const header = document.getElementById('red-ui-header') || document.getElementById('header');
-            if (!header) return;
-
-            if (document.getElementById('pm-header-widget')) return;
-
-            const widget = document.createElement('div');
-            widget.id = 'pm-header-widget';
-            widget.innerHTML = `
-                <div class="pm-hw-group pm-has-tooltip" data-metric="cpu">
-                    <i class="fa fa-microchip"></i> <span id="pm-hw-cpu">--%</span>
-                    ${createTooltip('cpu')}
-                </div>
-                <div class="pm-hw-sep"></div>
-                <div class="pm-hw-group pm-hw-ram-group pm-has-tooltip" data-metric="memory">
-                    <i class="fa fa-memory"></i>
-                    <div class="pm-ram-stack">
-                        <div id="pm-ram-nr" class="pm-rs-bar pm-rs-nr"></div>
-                    </div>
-                    <span id="pm-hw-ram-text" class="pm-hw-mini-text">--</span>
-                    ${createTooltip('memory')}
-                </div>
-                <div class="pm-hw-sep"></div>
-                <div class="pm-hw-group pm-has-tooltip" data-metric="lag">
-                    <i class="fa fa-clock-o"></i> <span id="pm-hw-lag">--ms</span>
-                    ${createTooltip('lag')}
-                </div>
-                <div class="pm-hw-sep"></div>
-                <div class="pm-hw-group pm-hw-peak pm-has-tooltip" id="pm-hw-peak" data-metric="peak" onclick="RED.performanceMonitor.resetPeak()">
-                    <i class="fa fa-arrow-up"></i> <span id="pm-hw-peak-val">--</span>
-                    ${createTooltip('peak')}
-                </div>
-            `;
-
-            const style = document.createElement('style');
-            style.id = 'pm-header-style';
-            style.textContent = `
-                #pm-header-widget {
-                    position: absolute;
-                    top: 0;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    height: 40px;
-                    display: flex;
-                    align-items: center;
-                    background: var(--red-ui-secondary-background, rgba(255,255,255,0.95));
-                    backdrop-filter: blur(8px);
-                    -webkit-backdrop-filter: blur(8px);
-                    border-radius: 0 0 8px 8px;
-                    padding: 0 15px;
-                    color: var(--red-ui-text-color-primary, #333);
-                    font-family: var(--red-ui-primary-font, 'Helvetica Neue', Arial, sans-serif);
-                    font-size: 12px;
-                    font-weight: 500;
-                    z-index: 999;
-                    border: 1px solid var(--red-ui-secondary-border-color, #ccc);
-                    border-top: none;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                }
-
-                #pm-header-widget.pm-hud-compact {
-                    height: 32px;
-                    padding: 0 10px;
-                    font-size: 10px;
-                }
-                #pm-header-widget.pm-hud-compact .pm-hw-sep { height: 12px; margin: 0 6px; }
-                #pm-header-widget.pm-hud-compact .pm-ram-stack { width: 40px; height: 6px; }
-                #pm-header-widget.pm-hud-compact .pm-hw-mini-text { font-size: 9px; min-width: 40px; }
-
-                #pm-header-widget.pm-hud-large {
-                    height: 50px;
-                    padding: 0 20px;
-                    font-size: 14px;
-                }
-                #pm-header-widget.pm-hud-large .pm-hw-sep { height: 20px; margin: 0 14px; }
-                #pm-header-widget.pm-hud-large .pm-ram-stack { width: 80px; height: 10px; }
-                #pm-header-widget.pm-hud-large .pm-hw-mini-text { font-size: 13px; min-width: 60px; }
-
-                .pm-hw-group {
-                    display: flex;
-                    align-items: center;
-                    gap: 6px;
-                    position: relative;
-                    cursor: default;
-                }
-                .pm-hw-sep {
-                    height: 16px;
-                    width: 1px;
-                    background: currentColor;
-                    opacity: 0.3;
-                    margin: 0 10px;
-                }
-                .pm-ram-stack {
-                    width: 60px;
-                    height: 8px;
-                    background: currentColor;
-                    opacity: 0.2;
-                    border-radius: 4px;
-                    overflow: hidden;
-                }
-                .pm-rs-bar {
-                    height: 100%;
-                    transition: width 0.5s ease;
-                    opacity: 1;
-                }
-                .pm-rs-nr {
-                    background: var(--red-ui-text-color-link, #0066cc);
-                }
-                .pm-hw-mini-text {
-                    font-size: 11px;
-                    opacity: 0.8;
-                    min-width: 50px;
-                }
-                .pm-hw-peak {
-                    cursor: pointer;
-                    padding: 4px 8px;
-                    border-radius: 4px;
-                    background: rgba(128,128,128,0.15);
-                    opacity: 1;
-                    display: flex;
-                    align-items: center;
-                    gap: 4px;
-                }
-                .pm-hw-peak:hover {
-                    background: rgba(128,128,128,0.25);
-                }
-                .pm-hw-peak span,
-                .pm-hw-peak i {
-                    opacity: 1;
-                }
-                .pm-leak-warn {
-                /* Tooltip Styles Removed */
-                }
-                .pm-tooltip::before {
-                    content: '';
-                    position: absolute;
-                    top: -6px;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    border-left: 6px solid transparent;
-                    border-right: 6px solid transparent;
-                    border-bottom: 6px solid var(--red-ui-secondary-border-color, #ccc);
-                }
-                .pm-tooltip::after {
-                    content: '';
-                    position: absolute;
-                    top: -5px;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    border-left: 5px solid transparent;
-                    border-right: 5px solid transparent;
-                    border-bottom: 5px solid var(--red-ui-primary-background, #fff);
-                }
-
-                    color: var(--red-ui-text-color-secondary, #666);
-                    margin-bottom: 8px;
-                }
-                .pm-tooltip-thresholds {
-                    display: flex;
-                    gap: 10px;
-                    font-size: 10px;
-                    padding-top: 8px;
-                    border-top: 1px solid var(--red-ui-tertiary-border-color, #eee);
-                }
-                .pm-tooltip-tip {
-                    font-size: 10px;
-                    color: var(--red-ui-text-color-warning, #ef6c00);
-                    margin-top: 6px;
-                }
-
-                .pm-status-good { color: var(--red-ui-text-color-success, #2e7d32) !important; }
-                .pm-status-warn { color: var(--red-ui-text-color-warning, #ef6c00) !important; }
-                .pm-status-crit { color: var(--red-ui-text-color-error, #c62828) !important; }
-            `;
-            document.head.appendChild(style);
-            header.appendChild(widget);
-
-            // Apply theme and visibility
-            applyHudTheme();
-            toggleHudVisibility();
-        }
-
-        function updateHeaderWidget(stats) {
-            const cpuEl = document.getElementById('pm-hw-cpu');
-            const nrBar = document.getElementById('pm-ram-nr');
-            const ramText = document.getElementById('pm-hw-ram-text');
-            const lagEl = document.getElementById('pm-hw-lag');
-            const peakEl = document.getElementById('pm-hw-peak-val');
-            const peakContainer = document.getElementById('pm-hw-peak');
-
-            if (!cpuEl || !stats || !stats.nodeRed) return;
-
-            // CPU
-            const cpuVal = stats.nodeRed.cpu || 0;
-            cpuEl.textContent = cpuVal.toFixed(1) + '%';
-            cpuEl.className = getStatusClass(cpuVal);
-
-            // RAM Bar
-            const totalMem = stats.system.memory.total || 1;
-            const nrMem = stats.nodeRed.memory.rss || 0;
-            const nrPct = (nrMem / totalMem) * 100;
-
-            nrBar.style.width = (isNaN(nrPct) ? 0 : Math.min(nrPct * 10, 100)) + '%';
-            ramText.textContent = formatBytes(nrMem, 1);
-
-            // Event Loop Lag
+  // src/editor/sidebar/sections.js
+  var require_sections = __commonJS({
+    "src/editor/sidebar/sections.js"(exports, module) {
+      "use strict";
+      var { formatBytes, formatUptime, statusClass, lagStatusClass } = require_format();
+      var SECTIONS = [
+        // App group
+        {
+          id: "app-info",
+          group: "app",
+          label: "App Info",
+          icon: "fa-info-circle",
+          value: (stats) => {
+            const pid = stats.nodeRed.pid || "N/A";
+            const uptime = stats.nodeRed.uptime ? formatUptime(stats.nodeRed.uptime) : "N/A";
+            return `PID ${pid} \u2022 ${uptime}`;
+          },
+          percent: () => null,
+          sparkKey: null,
+          detail: (stats) => [
+            { label: "PID", value: String(stats.nodeRed.pid || "N/A") },
+            { label: "Uptime", value: stats.nodeRed.uptime ? formatUptime(stats.nodeRed.uptime) : "N/A" }
+          ]
+        },
+        {
+          id: "app-cpu",
+          group: "app",
+          label: "Node-RED CPU",
+          icon: "fa-microchip",
+          value: (stats) => {
+            const cpu = stats.nodeRed.cpu || 0;
+            return `${cpu.toFixed(1)}%`;
+          },
+          percent: (stats) => stats.nodeRed.cpu || 0,
+          sparkKey: "cpu",
+          detail: (stats) => [
+            { label: "CPU", value: `${(stats.nodeRed.cpu || 0).toFixed(1)}%` }
+          ]
+        },
+        {
+          id: "app-memory",
+          group: "app",
+          label: "Node-RED Memory",
+          icon: "fa-database",
+          value: (stats) => {
+            const heapUsed = stats.nodeRed.memory?.heapUsed || 0;
+            const heapTotal = stats.nodeRed.memory?.heapTotal || 0;
+            return `${formatBytes(heapUsed)} / ${formatBytes(heapTotal)}`;
+          },
+          percent: (stats) => {
+            const heapUsed = stats.nodeRed.memory?.heapUsed || 0;
+            const heapTotal = stats.nodeRed.memory?.heapTotal || 1;
+            return heapUsed / heapTotal * 100;
+          },
+          sparkKey: "memory",
+          detail: (stats) => {
+            const mem = stats.nodeRed.memory || {};
+            return [
+              { label: "Heap Used", value: formatBytes(mem.heapUsed || 0) },
+              { label: "Heap Total", value: formatBytes(mem.heapTotal || 0) },
+              { label: "RSS", value: formatBytes(mem.rss || 0) },
+              { label: "External", value: formatBytes(mem.external || 0) },
+              { label: "Array Buffers", value: formatBytes(mem.arrayBuffers || 0) }
+            ];
+          }
+        },
+        {
+          id: "app-lag",
+          group: "app",
+          label: "Event Loop Lag",
+          icon: "fa-hourglass-half",
+          value: (stats) => {
             const lag = stats.nodeRed.eventLoopLag || 0;
-            lagEl.textContent = lag.toFixed(2) + 'ms';
-            lagEl.className = getLagStatusClass(lag);
-
-            // Peak / High Watermark
-            if (nrMem > sessionRec.peakRam) {
-                sessionRec.peakRam = nrMem;
-            }
-            peakEl.textContent = formatBytes(sessionRec.peakRam);
-
-            updateLeakDetection(nrMem, peakContainer);
+            return `${lag.toFixed(2)}ms`;
+          },
+          percent: () => null,
+          sparkKey: "lag",
+          detail: (stats) => [
+            { label: "Lag", value: `${(stats.nodeRed.eventLoopLag || 0).toFixed(2)}ms` }
+          ]
+        },
+        // System group
+        {
+          id: "sys-cpu",
+          group: "sys",
+          label: "System CPU",
+          icon: "fa-server",
+          value: (stats) => {
+            const cpu = stats.system.cpu?.percent || 0;
+            const cores = stats.system.cpu?.cores || 1;
+            return `${cpu.toFixed(1)}% (${cores} cores)`;
+          },
+          percent: (stats) => stats.system.cpu?.percent || 0,
+          sparkKey: "sysCpu",
+          detail: (stats) => {
+            const cpu = stats.system.cpu || {};
+            return [
+              { label: "Usage", value: `${(cpu.percent || 0).toFixed(1)}%` },
+              { label: "Cores", value: String(cpu.cores || "N/A") },
+              { label: "Model", value: cpu.model || "N/A" }
+            ];
+          }
+        },
+        {
+          id: "sys-memory",
+          group: "sys",
+          label: "System Memory",
+          icon: "fa-th-large",
+          value: (stats) => {
+            const used = stats.system.memory?.used || 0;
+            const total = stats.system.memory?.total || 0;
+            return `${formatBytes(used)} / ${formatBytes(total)}`;
+          },
+          percent: (stats) => stats.system.memory?.usedPercent || 0,
+          sparkKey: "sysMemory",
+          detail: (stats) => {
+            const mem = stats.system.memory || {};
+            return [
+              { label: "Used", value: formatBytes(mem.used || 0) },
+              { label: "Total", value: formatBytes(mem.total || 0) },
+              { label: "Free", value: formatBytes(mem.free || 0) }
+            ];
+          }
+        },
+        {
+          id: "sys-disk",
+          group: "sys",
+          label: "Disk Space",
+          icon: "fa-hdd-o",
+          value: (stats) => {
+            const used = stats.system.disk?.used || 0;
+            const total = stats.system.disk?.total || 0;
+            return `${formatBytes(used)} / ${formatBytes(total)}`;
+          },
+          percent: (stats) => stats.system.disk?.usedPercent || 0,
+          sparkKey: "sysDisk",
+          detail: (stats) => {
+            const disk = stats.system.disk || {};
+            return [
+              { label: "Used", value: formatBytes(disk.used || 0) },
+              { label: "Total", value: formatBytes(disk.total || 0) },
+              { label: "Free", value: formatBytes(disk.free || 0) }
+            ];
+          }
+        },
+        {
+          id: "sys-info",
+          group: "sys",
+          label: "System Info",
+          icon: "fa-desktop",
+          value: (stats) => {
+            const model = stats.system.cpu?.model || "Unknown";
+            const cores = stats.system.cpu?.cores || "N/A";
+            return `${model} (${cores} cores)`;
+          },
+          percent: () => null,
+          sparkKey: null,
+          detail: (stats) => {
+            const cpu = stats.system.cpu || {};
+            const mem = stats.system.memory || {};
+            return [
+              { label: "CPU Model", value: cpu.model || "N/A" },
+              { label: "Cores", value: String(cpu.cores || "N/A") },
+              { label: "Total Memory", value: formatBytes(mem.total || 0) }
+            ];
+          }
         }
+      ];
+      module.exports = { SECTIONS };
+    }
+  });
 
-        function updateLeakDetection(currentRam, el) {
-            sessionRec.historyRam.push(currentRam);
-            if (sessionRec.historyRam.length > 150) sessionRec.historyRam.shift();
-
-            if (sessionRec.historyRam.length >= 20) {
-                const recent = sessionRec.historyRam.slice(-10);
-                if (recent.some(isNaN)) return;
-
-                const isRising = recent.every((val, i, arr) => i === 0 || val >= arr[i - 1]);
-
-                if (isRising && (currentRam >= sessionRec.peakRam * 0.99)) {
-                    el.classList.add('pm-leak-warn');
-                } else {
-                    el.classList.remove('pm-leak-warn');
-                }
-            }
+  // src/editor/sparkline.js
+  var require_sparkline = __commonJS({
+    "src/editor/sparkline.js"(exports, module) {
+      "use strict";
+      function sparkline(points, opts = {}) {
+        const width = opts.width || 120;
+        const height = opts.height || 18;
+        const colorVar = opts.colorVar || "--red-ui-text-color-link";
+        if (!points || points.length === 0) {
+          return `<svg width="${width}" height="${height}" class="pm-spark" aria-hidden="true"></svg>`;
         }
+        const max = Math.max(...points, 1);
+        const step = points.length > 1 ? width / (points.length - 1) : 0;
+        const pts = points.map((v, i) => `${(i * step).toFixed(1)},${(height - v / max * height).toFixed(1)}`).join(" ");
+        return `<svg width="${width}" height="${height}" class="pm-spark" aria-hidden="true" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="var(${colorVar})" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
+      }
+      module.exports = { sparkline };
+    }
+  });
 
-        // Settings Panel
-        function showSettingsPanel() {
-            document.getElementById('pm-settings-overlay')?.remove();
-
-            const themeOptionsHtml = Object.entries(hudThemes).map(([key, theme]) =>
-                `<option value="${key}" ${settings.hudTheme === key ? 'selected' : ''}>${theme.icon} ${theme.name}</option>`
-            ).join('');
-
-            const themeDescriptions = Object.entries(hudThemes).map(([key, theme]) =>
-                `<div class="pm-theme-preview" data-theme="${key}" style="display: ${key === settings.hudTheme ? 'block' : 'none'}">
-                    <small>${theme.description}</small>
-                </div>`
-            ).join('');
-
-            const panel = document.createElement('div');
-            panel.id = 'pm-settings-overlay';
-            panel.innerHTML = `
-                <div class="pm-settings-modal">
-                    <h3>Performance Monitor Settings</h3>
-                    
-                    <div class="pm-setting-section">
-                        <div class="pm-setting-section-title">General</div>
-                        <div class="pm-setting-row">
-                            <label>Refresh Rate</label>
-                            <select id="pm-setting-interval">
-                                <option value="1000">1 second</option>
-                                <option value="2000">2 seconds</option>
-                                <option value="5000">5 seconds</option>
-                                <option value="10000">10 seconds</option>
-                            </select>
-                        </div>
-                        <div class="pm-setting-row">
-                            <label>History Retention</label>
-                            <input type="number" id="pm-setting-retentionDays" min="1" max="90" value="${settings.retentionDays}"> days
-                        </div>
-                        <div class="pm-setting-row">
-                            <label>Max DB Size</label>
-                            <input type="number" id="pm-setting-maxDbSizeMB" min="50" max="10000" value="${settings.maxDbSizeMB}"> MB
-                        </div>
-                    </div>
-
-                    <div class="pm-setting-section">
-                        <div class="pm-setting-section-title">Storage</div>
-                        <div class="pm-setting-row">
-                            <label for="pm-retention-days">History retention (days)</label>
-                            <input type="number" id="pm-retention-days" min="1" max="90" value="7">
-                        </div>
-                        <div class="pm-setting-row">
-                            <label for="pm-max-db-mb">Max DB size (MB)</label>
-                            <input type="number" id="pm-max-db-mb" min="50" max="10000" value="500">
-                        </div>
-                    </div>
-
-                    <div class="pm-setting-section">
-                        <div class="pm-setting-section-title">HUD (Header Widget)</div>
-                        <div class="pm-setting-row">
-                            <label>
-                                <input type="checkbox" id="pm-setting-hideHud" ${settings.hideHud ? 'checked' : ''}>
-                                Hide HUD
-                            </label>
-                        </div>
-                        <div class="pm-setting-row">
-                            <label>HUD Theme</label>
-                            <select id="pm-setting-hudTheme">
-                                ${themeOptionsHtml}
-                            </select>
-                        </div>
-                        <div class="pm-setting-row">
-                            <label>HUD Size</label>
-                            <select id="pm-setting-hudWidgetSize">
-                                <option value="Compact" ${settings.hudSize === 'Compact' ? 'selected' : ''}>Compact</option>
-                                <option value="Normal" ${settings.hudSize === 'Normal' ? 'selected' : ''}>Normal</option>
-                                <option value="Large" ${settings.hudSize === 'Large' ? 'selected' : ''}>Large</option>
-                            </select>
-                        </div>
-                        <div id="pm-theme-descriptions">
-                            ${themeDescriptions}
-                        </div>
-                    </div>
-
-                    <div class="pm-setting-section">
-                        <div class="pm-setting-section-title">Sidebar</div>
-                        <div class="pm-setting-row">
-                            <label>Font Size</label>
-                            <input type="number" id="pm-setting-fontSize" min="8" max="24" value="${settings.paneFontSize}"> px
-                        </div>
-                        <div class="pm-setting-row">
-                            <label>Font Family</label>
-                            <select id="pm-setting-fontFamily">
-                                <option value="Helvetica Neue">Helvetica Neue</option>
-                                <option value="Arial">Arial</option>
-                                <option value="Roboto">Roboto</option>
-                                <option value="Inter">Inter</option>
-                                <option value="system-ui">System UI</option>
-                                <option value="Consolas">Consolas</option>
-                            </select>
-                        </div>
-                        <div class="pm-setting-row">
-                            <label>Size</label>
-                            <select id="pm-setting-hudSize">
-                                <option value="Compact">Compact</option>
-                                <option value="Normal">Normal</option>
-                                <option value="Large">Large</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="pm-settings-actions">
-                        <button class="pm-btn-cancel" onclick="RED.performanceMonitor.closeSettings()">Cancel</button>
-                        <button class="pm-btn-save" onclick="RED.performanceMonitor.saveSettings()">Apply</button>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(panel);
-
-            // Set current values
-            document.getElementById('pm-setting-interval').value = settings.refreshInterval;
-            document.getElementById('pm-setting-retentionDays').value = settings.retentionDays;
-            document.getElementById('pm-setting-maxDbSizeMB').value = settings.maxDbSizeMB;
-            document.getElementById('pm-setting-fontFamily').value = settings.paneFontFamily;
-            document.getElementById('pm-setting-hudSize').value = settings.hudSize;
-
-            // Load storage settings from backend
-            fetch('performance-monitor/settings')
-                .then(r => r.json())
-                .then(data => {
-                    if (data.retentionDays) document.getElementById('pm-retention-days').value = data.retentionDays;
-                    if (data.maxDbSizeMB) document.getElementById('pm-max-db-mb').value = data.maxDbSizeMB;
-                })
-                .catch(() => {});
-
-            // Add theme preview listener
-            document.getElementById('pm-setting-hudTheme').addEventListener('change', function () {
-                const previews = document.querySelectorAll('.pm-theme-preview');
-                previews.forEach(p => p.style.display = 'none');
-                const selected = document.querySelector(`.pm-theme-preview[data-theme="${this.value}"]`);
-                if (selected) selected.style.display = 'block';
-            });
+  // src/editor/ring-buffer.js
+  var require_ring_buffer = __commonJS({
+    "src/editor/ring-buffer.js"(exports, module) {
+      "use strict";
+      var RingBuffer = class {
+        constructor(size) {
+          this._size = size;
+          this._buf = [];
         }
-
-        // Build Sidebar Content
-        function buildSidebarContent() {
-            return `
-                <style>
-                    /* Performance Monitor - Native Node-RED Theme Integration */
-                    .pm-sidebar {
-                        --pm-font-size: 12px;
-                        --pm-font-family: 'Helvetica Neue', Arial, sans-serif;
-                        --pm-padding: 10px;
-                        --pm-gap: 8px;
-                        
-                        padding: 0;
-                        margin: 0;
-                        font-family: var(--pm-font-family);
-                        font-size: var(--pm-font-size);
-                        color: var(--red-ui-text-color-primary, #333);
-                        background: var(--red-ui-primary-background, #fff);
-                        height: 100%;
-                        overflow-y: auto;
-                    }
-
-                    .pm-title {
-                        color: var(--red-ui-text-color-link, #0066cc);
-                        font-weight: 600;
-                        text-transform: uppercase;
-                        letter-spacing: 0.5px;
-                        margin-bottom: 5px;
-                        font-size: calc(var(--pm-font-size) - 2px);
-                    }
-
-                    .pm-value {
-                        color: var(--red-ui-text-color-primary, #333);
-                        font-weight: 600;
-                    }
-
-                    .pm-unit {
-                        color: var(--red-ui-text-color-secondary, #666);
-                        font-size: calc(var(--pm-font-size) - 3px);
-                    }
-
-                    .pm-status-good { color: var(--red-ui-text-color-success, #2e7d32); }
-                    .pm-status-warn { color: var(--red-ui-text-color-warning, #ef6c00); }
-                    .pm-status-crit { color: var(--red-ui-text-color-error, #c62828); }
-
-                    .pm-bar-good { background-color: var(--red-ui-text-color-success, #4caf50); }
-                    .pm-bar-warn { background-color: var(--red-ui-text-color-warning, #ff9800); }
-                    .pm-bar-crit { background-color: var(--red-ui-text-color-error, #f44336); }
-
-                    .pm-section {
-                        border: 1px solid var(--red-ui-secondary-border-color, #ccc);
-                        background: var(--red-ui-primary-background, #fff);
-                        margin: 4px 6px;
-                        border-radius: 4px;
-                        overflow: visible;
-                    }
-
-                    .pm-section-header {
-                        display: flex;
-                        justify-content: space-between;
-                        padding: 4px 8px;
-                        background: var(--red-ui-secondary-background, #f9f9f9);
-                        font-weight: 500;
-                        font-size: 11px;
-                        border-bottom: 1px solid var(--red-ui-secondary-border-color, #eee);
-                        align-items: center;
-                    }
-
-                    .pm-section-content {
-                        padding: 4px 8px;
-                    }
-
-                    /* Collapsed State Logic */
-                    .pm-section.collapsed .pm-grid-row,
-                    .pm-section.collapsed .pm-info-row,
-                    .pm-section.collapsed .pm-bar-container,
-                    .pm-section.collapsed .pm-spark-box {
-                        display: none !important;
-                    }
-                    
-                    /* Header Value Logic */
-                    .pm-header-value {
-                        font-weight: bold;
-                        color: var(--red-ui-text-color-primary, #333);
-                        margin-left: 8px;
-                        font-size: 11px;
-                        opacity: 0.9;
-                        display: none; /* Hidden by default (Expanded) */
-                    }
-
-                    .pm-section.collapsed .pm-header-value {
-                        display: inline; /* Visible when collapsed */
-                    }
-
-                    .pm-grid-row {
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                        margin-bottom: 3px;
-                    }
-
-                    .pm-spark-box {
-                        margin-top: 6px;
-                    }
-
-                    .pm-tools {
-                        display: flex;
-                        gap: 8px;
-                        color: var(--red-ui-text-color-secondary, #999);
-                        align-items: center;
-                    }
-                    
-                    .pm-tools i {
-                        cursor: pointer;
-                    }
-                    
-                    .pm-tools i:hover {
-                        color: var(--red-ui-text-color-primary, #666);
-                    }
-
-                    .pm-grid-wide {
-                        display: grid;
-                        grid-template-columns: 1fr 1fr;
-                        gap: var(--pm-gap);
-                        margin-bottom: var(--pm-gap);
-                    }
-
-                    /* Legacy header value rule removal if present */
-
-                    .pm-bar-container {
-                        height: 6px;
-                        background: var(--red-ui-tertiary-background, #e0e0e0);
-                        border-radius: 3px;
-                        overflow: hidden;
-                    }
-
-                    .pm-bar-fill {
-                        height: 100%;
-                        transition: width 0.3s ease;
-                        border-radius: 3px;
-                    }
-
-                    .pm-spark-box {
-                        background: var(--red-ui-primary-background, #fff);
-                        padding: 8px;
-                        border: 1px solid var(--red-ui-secondary-border-color, #ddd);
-                        border-radius: 4px;
-                    }
-
-                    .pm-spark-header {
-                        display: flex;
-                        justify-content: space-between;
-                        margin-bottom: 4px;
-                    }
-
-                    .pm-spark-label {
-                        font-size: calc(var(--pm-font-size) - 3px);
-                        color: var(--red-ui-text-color-secondary, #666);
-                        text-transform: uppercase;
-                    }
-
-                    .pm-toolbar {
-                        display: flex;
-                        border-bottom: 1px solid var(--red-ui-secondary-border-color, #ddd);
-                        background: var(--red-ui-secondary-background, #fafafa);
-                        padding: 6px 10px;
-                        gap: 5px;
-                    }
-
-                    .pm-toolbar button {
-                        background: var(--red-ui-primary-background, #fff);
-                        border: 1px solid var(--red-ui-secondary-border-color, #ccc);
-                        color: var(--red-ui-text-color-secondary, #666);
-                        padding: 4px 10px;
-                        font-family: inherit;
-                        font-size: calc(var(--pm-font-size) - 2px);
-                        cursor: pointer;
-                        border-radius: 3px;
-                        transition: all 0.2s ease;
-                    }
-
-                    .pm-toolbar button:hover {
-                        border-color: var(--red-ui-text-color-link, #0066cc);
-                        color: var(--red-ui-text-color-link, #0066cc);
-                    }
-
-                    .pm-toolbar button.active {
-                        background: var(--red-ui-text-color-link, #0066cc);
-                        color: #fff;
-                        border-color: var(--red-ui-text-color-link, #0066cc);
-                    }
-
-                    /* Settings Modal */
-                    #pm-settings-overlay {
-                        position: fixed;
-                        top: 0;
-                        left: 0;
-                        width: 100%;
-                        height: 100%;
-                        background: rgba(0,0,0,0.5);
-                        z-index: 9999;
-                        display: flex;
-                        justify-content: center;
-                        align-items: center;
-                    }
-
-                    .pm-settings-modal {
-                        background: var(--red-ui-primary-background, #fff);
-                        border: 1px solid var(--red-ui-secondary-border-color, #ccc);
-                        border-radius: 8px;
-                        padding: 20px;
-                        width: 360px;
-                        max-height: 80vh;
-                        overflow-y: auto;
-                        box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-                        font-family: var(--red-ui-primary-font, 'Helvetica Neue', Arial, sans-serif);
-                    }
-
-                    .pm-settings-modal h3 {
-                        color: var(--red-ui-text-color-primary, #333);
-                        margin: 0 0 15px 0;
-                        font-size: 16px;
-                        border-bottom: 1px solid var(--red-ui-secondary-border-color, #ddd);
-                        padding-bottom: 10px;
-                    }
-
-                    .pm-setting-section {
-                        margin-bottom: 20px;
-                    }
-
-                    .pm-setting-section-title {
-                        font-size: 11px;
-                        font-weight: 600;
-                        text-transform: uppercase;
-                        color: var(--red-ui-text-color-link, #0066cc);
-                        margin-bottom: 10px;
-                        letter-spacing: 0.5px;
-                    }
-
-                    .pm-setting-row {
-                        margin-bottom: 10px;
-                        display: flex;
-                        align-items: center;
-                        gap: 10px;
-                    }
-
-                    .pm-setting-row label {
-                        flex: 1;
-                        color: var(--red-ui-text-color-secondary, #666);
-                        font-size: 12px;
-                    }
-
-                    .pm-setting-row select,
-                    .pm-setting-row input[type="number"] {
-                        background: var(--red-ui-secondary-background, #fafafa);
-                        color: var(--red-ui-text-color-primary, #333);
-                        border: 1px solid var(--red-ui-secondary-border-color, #ccc);
-                        padding: 6px 8px;
-                        border-radius: 3px;
-                        font-family: inherit;
-                        font-size: 12px;
-                    }
-
-                    .pm-setting-row input[type="checkbox"] {
-                        margin-right: 8px;
-                    }
-
-                    .pm-theme-preview {
-                        padding: 8px;
-                        background: var(--red-ui-tertiary-background, #f5f5f5);
-                        border-radius: 4px;
-                        margin-top: 8px;
-                    }
-
-                    .pm-theme-preview small {
-                        color: var(--red-ui-text-color-secondary, #666);
-                        font-size: 11px;
-                    }
-
-                    .pm-settings-actions {
-                        margin-top: 20px;
-                        text-align: right;
-                        display: flex;
-                        gap: 10px;
-                        justify-content: flex-end;
-                    }
-
-                    .pm-btn-save {
-                        background: var(--red-ui-text-color-link, #0066cc);
-                        color: #fff;
-                        border: none;
-                        padding: 8px 20px;
-                        font-weight: 500;
-                        cursor: pointer;
-                        border-radius: 4px;
-                    }
-
-                    .pm-btn-save:hover {
-                        opacity: 0.9;
-                    }
-
-                    .pm-btn-cancel {
-                        background: transparent;
-                        color: var(--red-ui-text-color-secondary, #666);
-                        border: 1px solid var(--red-ui-secondary-border-color, #ccc);
-                        padding: 7px 15px;
-                        cursor: pointer;
-                        border-radius: 4px;
-                    }
-
-                    .pm-btn-cancel:hover {
-                        border-color: var(--red-ui-text-color-primary, #333);
-                    }
-
-                    .pm-info-row {
-                        display: flex;
-                        justify-content: space-between;
-                        padding: 4px 0;
-                        border-bottom: 1px dashed var(--red-ui-tertiary-border-color, #eee);
-                    }
-
-                    .pm-info-label {
-                        color: var(--red-ui-text-color-secondary, #666);
-                    }
-                    
-                    .pm-group-header {
-                        padding: 10px 10px 5px 10px;
-                        font-size: 11px;
-                        font-weight: 700;
-                        color: var(--red-ui-text-color-secondary, #666);
-                        text-transform: uppercase;
-                        letter-spacing: 0.5px;
-                        display: flex;
-                        align-items: center;
-                        gap: 6px;
-                    }
-                    
-                    .pm-group-container {
-                        margin-bottom: 20px;
-                    }
-                </style>
-
-                <div class="pm-toolbar">
-                    <button onclick="RED.performanceMonitor.openSettings()"><i class="fa fa-cog"></i> Settings</button>
-                    <button id="pm-btn-pause" onclick="RED.performanceMonitor.togglePause()"><i class="fa fa-pause"></i> Pause</button>
-                    <button onclick="RED.performanceMonitor.refresh()"><i class="fa fa-refresh"></i></button>
-                    <div style="flex:1"></div>
-                    <span id="pm-connection-status" style="color: var(--red-ui-text-color-success); font-size: 10px; align-self: center;">● ONLINE</span>
-                </div>
-                <div id="pm-container" class="pm-sidebar">
-                    <div class="pm-group-header" onclick="RED.performanceMonitor.toggleGroup('nr')">
-                        <span><i class="fa fa-caret-down" id="pm-group-icon-nr"></i> Node-RED Application</span>
-                    </div>
-                    <div id="pm-group-nr" class="pm-group-container"></div>
-                    
-                    <div class="pm-group-header" onclick="RED.performanceMonitor.toggleGroup('sys')">
-                        <span><i class="fa fa-caret-down" id="pm-group-icon-sys"></i> System Hardware</span>
-                    </div>
-                    <div id="pm-group-sys" class="pm-group-container"></div>
-                </div>
-            `;
+        push(v) {
+          this._buf.push(v);
+          if (this._buf.length > this._size) this._buf.shift();
         }
-
-        // Section order
-        let sectionOrder = ['cpu', 'memory', 'lag', 'system', 'process'];
-
-        // Render sections
-        function renderSections(stats) {
-            const containerNr = document.getElementById('pm-group-nr');
-            const containerSys = document.getElementById('pm-group-sys');
-            if (!containerNr || !containerSys) return;
-
-            // Define sections for each group
-            const nrSections = ['app-info', 'app-cpu', 'app-memory', 'app-lag'];
-            const sysSections = ['sys-cpu', 'sys-memory', 'sys-disk', 'sys-info'];
-
-            const renderGroup = (sections, container) => {
-                sections.forEach(sectionId => {
-                    let sectionEl = document.getElementById(`pm-sec-${sectionId}`);
-                    if (!sectionEl) {
-                        sectionEl = createSectionElement(sectionId);
-                        container.appendChild(sectionEl);
-                    }
-                    updateSectionContent(sectionId, stats);
-                });
-            };
-
-            renderGroup(nrSections, containerNr);
-            renderGroup(sysSections, containerSys);
-
-            // Update history
-            history.cpu.push(stats.nodeRed.cpu || 0);
-            history.cpu.shift();
-            history.memory.push(stats.nodeRed.memory.heapUsed / stats.nodeRed.memory.heapTotal * 100);
-            history.memory.shift();
-            history.lag.push(stats.nodeRed.eventLoopLag || 0);
-            history.lag.shift();
-
-            // System history
-            history.sysCpu.push(stats.system.cpu.percent || 0);
-            history.sysCpu.shift();
-            history.sysRam.push(stats.system.memory.usedPercent || 0);
-            history.sysRam.shift();
-
-            // Disk history (optional, usually flat but good for consistency)
-            const diskPct = (stats.system.disk && stats.system.disk.total > 0) ? stats.system.disk.usedPercent : 0;
-            history.sysDisk.push(diskPct);
-            history.sysDisk.shift();
+        values() {
+          return this._buf.slice();
         }
+      };
+      module.exports = RingBuffer;
+    }
+  });
 
-        function createSectionElement(id) {
-            const el = document.createElement('div');
-            el.id = `pm-sec-${id}`;
-            el.className = 'pm-section';
-            el.dataset.id = id;
-
-            const titles = {
-                'app-info': 'Node-RED Info',
-                'app-cpu': 'CPU Load',
-                'app-memory': 'Memory Usage',
-                'app-lag': 'Event Loop Latency',
-                'sys-cpu': 'CPU Load',
-                'sys-memory': 'RAM Usage',
-                'sys-disk': 'Disk Storage',
-                'sys-info': 'Host Information'
-            };
-
-            const tooltips = {
-                'app-cpu': 'Node-RED Process CPU usage (% of one core).',
-                'app-memory': 'Heap: JS Objects. RSS: Physical RAM.',
-                'app-lag': 'Delay in the event loop processing.',
-                'sys-cpu': 'Total system CPU load (all cores).',
-                'sys-memory': 'System-wide RAM usage.',
-                'sys-disk': 'Root partition disk usage.',
-                'sys-info': 'System platform and uptime details.',
-                'app-info': 'Process ID and Uptime.'
-            };
-
-            const icons = {
-                'app-info': 'fa-cube',
-                'app-cpu': 'fa-microchip',
-                'app-memory': 'fa-memory',
-                'app-lag': 'fa-bolt',
-                'sys-cpu': 'fa-server',
-                'sys-memory': 'fa-th-large',
-                'sys-disk': 'fa-hdd-o',
-                'sys-info': 'fa-desktop'
-            };
-
-            el.innerHTML = `
-                <div class="pm-section-header">
-                    <span class="pm-title"><i class="fa ${icons[id]}"></i> ${titles[id] || id.toUpperCase()} <span class="pm-header-value" id="pm-val-${id}"></span></span>
-                    <div class="pm-tools">
-                        <i class="fa fa-chevron-down" id="pm-toggle-${id}" onclick="RED.performanceMonitor.toggle('${id}')"></i>
-                    </div>
-                </div>
-                <div class="pm-content pm-section-content" id="pm-body-${id}"></div>
-            `;
-            return el;
-        }
-
-        function getBarClass(percent) {
-            if (percent < 70) return 'pm-bar-good';
-            if (percent < 90) return 'pm-bar-warn';
-            return 'pm-bar-crit';
-        }
-
-        function updateSectionContent(id, stats) {
-            const body = document.getElementById(`pm-body-${id}`);
-            if (!body) return;
-
-            let html = '';
-
-            const valEl = document.getElementById(`pm-val-${id}`);
-
-            if (id === 'app-cpu') {
-                const cpuPercent = stats.nodeRed.cpu || 0;
-                if (valEl) valEl.textContent = `${cpuPercent.toFixed(1)}%`;
-
-                html = `
-                    <div class="pm-grid-row">
-                        <span>Process Load</span>
-                        <div class="pm-bar-container">
-                            <div class="pm-bar-fill ${getBarClass(cpuPercent)}" style="width:${Math.min(cpuPercent, 100)}%"></div>
-                        </div>
-                        <span class="pm-value ${getStatusClass(cpuPercent)}">${cpuPercent.toFixed(1)}%</span>
-                    </div>
-                    <div class="pm-spark-box" style="margin-top: 8px;">
-                        ${generateSparkline(history.cpu, 200, 30, '--red-ui-text-color-link')}
-                    </div>
-                `;
-            }
-            else if (id === 'app-memory') {
-                const heapPct = (stats.nodeRed.memory.heapUsed / stats.nodeRed.memory.heapTotal) * 100;
-                const usedMB = formatBytes(stats.nodeRed.memory.heapUsed);
-                if (valEl) valEl.textContent = usedMB;
-
-                html = `
-                    <div class="pm-grid-row">
-                        <span>Heap (Used/Total)</span>
-                        <div class="pm-bar-container">
-                            <div class="pm-bar-fill ${getBarClass(heapPct)}" style="width:${heapPct}%"></div>
-                        </div>
-                        <span class="pm-value">${usedMB} / ${formatBytes(stats.nodeRed.memory.heapTotal)}</span>
-                    </div>
-                    <div class="pm-grid-row">
-                        <span>RSS (Resident)</span>
-                        <span class="pm-value">${formatBytes(stats.nodeRed.memory.rss)}</span>
-                    </div>
-                    <div class="pm-spark-box" style="margin-top: 8px;">
-                        ${generateSparkline(history.memory, 200, 30, '--red-ui-text-color-warning')}
-                    </div>
-                `;
-            }
-            else if (id === 'app-lag') {
-                const lag = stats.nodeRed.eventLoopLag || 0;
-                if (valEl) valEl.textContent = `${lag.toFixed(2)} ms`;
-                const lagPercent = Math.min((lag / 100) * 100, 100);
-
-                html = `
-                    <div class="pm-grid-row">
-                        <span>Current Lag</span>
-                        <div class="pm-bar-container">
-                            <div class="pm-bar-fill ${getBarClass(lagPercent)}" style="width:${lagPercent}%"></div>
-                        </div>
-                        <span class="pm-value ${getLagStatusClass(lag)}">${lag.toFixed(2)} ms</span>
-                    </div>
-                    <div class="pm-spark-box" style="margin-top: 8px;">
-                        ${generateSparkline(history.lag, 200, 30, '--red-ui-text-color-error')}
-                    </div>
-                `;
-            }
-            else if (id === 'sys-cpu') {
-                const sysCpu = stats.system.cpu.percent || 0;
-                if (valEl) valEl.textContent = `${sysCpu.toFixed(1)}%`;
-
-                html = `
-                    <div class="pm-grid-row">
-                        <span>Total Load</span>
-                        <div class="pm-bar-container">
-                            <div class="pm-bar-fill ${getBarClass(sysCpu)}" style="width:${Math.min(sysCpu, 100)}%"></div>
-                        </div>
-                        <span class="pm-value ${getStatusClass(sysCpu)}">${sysCpu.toFixed(1)}%</span>
-                    </div>
-                    <div style="margin-top: 8px; font-size: 10px; color: var(--red-ui-text-color-secondary);">
-                        ${stats.system.cpu.cores} Cores | ${stats.system.cpu.model.split('@')[0]}
-                    </div>
-                    <div class="pm-spark-box" style="margin-top: 8px;">
-                        ${generateSparkline(history.sysCpu, 200, 30, '--red-ui-text-color-link')}
-                    </div>
-                `;
-            }
-            else if (id === 'sys-memory') {
-                const sysPct = stats.system.memory.usedPercent;
-                if (valEl) valEl.textContent = `${sysPct.toFixed(1)}%`;
-
-                html = `
-                    <div class="pm-grid-row">
-                        <span>Used RAM</span>
-                        <div class="pm-bar-container">
-                            <div class="pm-bar-fill ${getBarClass(sysPct)}" style="width:${sysPct}%"></div>
-                        </div>
-                        <span class="pm-value">${sysPct.toFixed(1)}%</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px;">
-                        <span style="color: var(--red-ui-text-color-secondary);">Total: <span class="pm-value">${formatBytes(stats.system.memory.total)}</span></span>
-                        <span style="color: var(--red-ui-text-color-secondary);">Free: <span class="pm-value">${formatBytes(stats.system.memory.free)}</span></span>
-                    </div>
-                    <div class="pm-spark-box" style="margin-top: 8px;">
-                        ${generateSparkline(history.sysRam, 200, 30, '--red-ui-text-color-warning')}
-                    </div>
-                `;
-            }
-            else if (id === 'sys-disk') {
-                if (stats.system.disk && stats.system.disk.total > 0) {
-                    const diskUsed = stats.system.disk.total - stats.system.disk.free;
-                    const diskPct = stats.system.disk.usedPercent || 0;
-                    if (valEl) valEl.textContent = `${diskPct}%`;
-
-                    html = `
-                        <div class="pm-grid-row">
-                            <span>Root (${stats.system.disk.mount})</span>
-                            <div class="pm-bar-container">
-                                <div class="pm-bar-fill ${getBarClass(diskPct)}" style="width:${diskPct}%"></div>
-                            </div>
-                            <span class="pm-value">${diskPct}%</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px;">
-                            <span style="color: var(--red-ui-text-color-secondary);">Used: <span class="pm-value">${formatBytes(diskUsed)}</span></span>
-                            <span style="color: var(--red-ui-text-color-secondary);">Free: <span class="pm-value">${formatBytes(stats.system.disk.free)}</span></span>
-                        </div>
-                        <div class="pm-spark-box" style="margin-top: 8px;">
-                            ${generateSparkline(history.sysDisk, 200, 30, '--red-ui-text-color-success')}
-                        </div>
-                    `;
-                } else {
-                    html = '<div style="color:var(--red-ui-text-color-secondary); font-style:italic;">Disk info unavailable</div>';
-                    if (valEl) valEl.textContent = 'N/A';
-                }
-            }
-            else if (id === 'sys-info') {
-                html = `
-                    <div class="pm-info-row">
-                        <span class="pm-info-label">Platform</span>
-                        <span class="pm-value">${stats.system.platform} (${stats.system.arch})</span>
-                    </div>
-                    <div class="pm-info-row">
-                        <span class="pm-info-label">Node.js</span>
-                        <span class="pm-value">${stats.system.nodeVersion}</span>
-                    </div>
-                    <div class="pm-info-row">
-                        <span class="pm-info-label">Uptime</span>
-                        <span class="pm-value">${formatUptime(stats.system.uptime)}</span>
-                    </div>
-                `;
-            }
-            else if (id === 'app-info') {
-                html = `
-                    <div class="pm-info-row">
-                        <span class="pm-info-label">PID</span>
-                        <span class="pm-value">${stats.nodeRed.pid}</span>
-                    </div>
-                    <div class="pm-info-row">
-                        <span class="pm-info-label">Uptime</span>
-                        <span class="pm-value">${formatUptime(stats.nodeRed.uptime)}</span>
-                    </div>
-                    <div class="pm-info-row">
-                        <span class="pm-info-label">External Memory</span>
-                        <span class="pm-value">${formatBytes(stats.nodeRed.memory.external)}</span>
-                    </div>
-                    <div class="pm-info-row">
-                        <span class="pm-info-label">Array Buffers</span>
-                        <span class="pm-value">${formatBytes(stats.nodeRed.memory.arrayBuffers)}</span>
-                    </div>
-                `;
-            }
-
-            body.innerHTML = html;
-        }
-
-        // API Handling
-        async function fetchStats() {
-            if (isPaused) return;
-            try {
-                const res = await fetch('performance-monitor/stats');
-                const data = await res.json();
-                if (data.error) {
-                    throw new Error(data.error);
-                }
-                renderSections(data);
-                updateHeaderWidget(data);
-
-                const statusEl = document.getElementById('pm-connection-status');
-                if (statusEl) {
-                    statusEl.textContent = '● ONLINE';
-                    statusEl.style.color = 'var(--red-ui-text-color-success)';
-                }
-            } catch (e) {
-                const statusEl = document.getElementById('pm-connection-status');
-                if (statusEl) {
-                    statusEl.textContent = '● OFFLINE';
-                    statusEl.style.color = 'var(--red-ui-text-color-error)';
-                }
-            }
-        }
-
-        // Load settings from server
-        async function loadSettings() {
-            try {
-                const res = await fetch('performance-monitor/settings');
-                const data = await res.json();
-                settings = { ...settings, ...data };
-                applyCustomStyles();
-                applyHudTheme();
-                toggleHudVisibility();
-                restartTimer();
-            } catch (e) {
-                console.warn('Performance Monitor: Could not load settings', e);
-            }
-        }
-
-        function restartTimer() {
-            if (pollTimer) clearInterval(pollTimer);
-            pollTimer = setInterval(fetchStats, settings.refreshInterval);
-            fetchStats();
-        }
-
-        // Public API
-        RED.performanceMonitor = {
-            toggle: (id) => {
-                const section = document.getElementById(`pm-sec-${id}`);
-                if (section) {
-                    section.classList.toggle('collapsed');
-                    const icon = document.getElementById(`pm-toggle-${id}`);
-                    if (icon) {
-                        icon.classList.toggle('fa-chevron-down');
-                        icon.classList.toggle('fa-chevron-right');
-                    }
-                }
-            },
-            toggleGroup: (id) => {
-                const group = document.getElementById(`pm-group-${id}`);
-                const icon = document.getElementById(`pm-group-icon-${id}`);
-                if (group) {
-                    group.classList.toggle('collapsed');
-                    if (icon) {
-                        icon.classList.toggle('fa-caret-down');
-                        icon.classList.toggle('fa-caret-right');
-                    }
-                }
-            },
-            openSettings: showSettingsPanel,
-            closeSettings: () => document.getElementById('pm-settings-overlay')?.remove(),
-            saveSettings: async () => {
-                const newSettings = {
-                    refreshInterval: parseInt(document.getElementById('pm-setting-interval').value) || 2000,
-                    retentionDays: parseInt(document.getElementById('pm-setting-retentionDays').value) || 7,
-                    maxDbSizeMB: parseInt(document.getElementById('pm-setting-maxDbSizeMB').value) || 500,
-                    paneFontSize: parseInt(document.getElementById('pm-setting-fontSize').value) || 12,
-                    paneFontFamily: document.getElementById('pm-setting-fontFamily').value || 'Helvetica Neue',
-                    hudSize: document.getElementById('pm-setting-hudWidgetSize').value || 'Normal',
-                    hudTheme: document.getElementById('pm-setting-hudTheme').value || 'classic',
-                    hideHud: document.getElementById('pm-setting-hideHud').checked
-                };
-
-                const retentionDays = parseInt(document.getElementById('pm-retention-days').value) || 7;
-                const maxDbSizeMB = parseInt(document.getElementById('pm-max-db-mb').value) || 500;
-                await fetch('performance-monitor/settings', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ...newSettings, retentionDays, maxDbSizeMB })
-                });
-
-                Object.assign(settings, newSettings);
-                applyCustomStyles();
-                applyHudTheme();
-                applyHudSize();
-                toggleHudVisibility();
-                restartTimer();
-                RED.performanceMonitor.closeSettings();
-            },
-            togglePause: () => {
-                isPaused = !isPaused;
-                const btn = document.getElementById('pm-btn-pause');
-                if (btn) {
-                    btn.innerHTML = isPaused ? '<i class="fa fa-play"></i> Resume' : '<i class="fa fa-pause"></i> Pause';
-                    btn.classList.toggle('active');
-                }
-            },
-            resetPeak: () => {
-                sessionRec.peakRam = 0;
-                sessionRec.historyRam = [];
-                fetchStats();
-            },
-            refresh: fetchStats
-        };
-
-        // Register sidebar tab
-        RED.sidebar.addTab({
-            id: 'performance-monitor',
-            label: 'perf',
-            name: 'Performance Monitor',
-            iconClass: 'fa fa-tachometer',
-            content: buildSidebarContent(),
-            enableOnEdit: true
+  // src/editor/sidebar/metric-row.js
+  var require_metric_row = __commonJS({
+    "src/editor/sidebar/metric-row.js"(exports, module) {
+      "use strict";
+      var { statusClass, lagStatusClass } = require_format();
+      var { sparkline } = require_sparkline();
+      var RingBuffer = require_ring_buffer();
+      function metricRow(section) {
+        const detailId = `${section.id}-detail`;
+        const ringBuffer = new RingBuffer(120);
+        const el = document.createElement("div");
+        el.className = "pm-row";
+        const head = document.createElement("button");
+        head.className = "pm-row-head";
+        head.setAttribute("aria-expanded", "false");
+        head.setAttribute("aria-controls", detailId);
+        const icon = document.createElement("i");
+        icon.className = `fa ${section.icon}`;
+        icon.setAttribute("aria-hidden", "true");
+        head.appendChild(icon);
+        const label = document.createElement("span");
+        label.className = "pm-label";
+        label.textContent = section.label;
+        head.appendChild(label);
+        const value = document.createElement("span");
+        value.className = "pm-value";
+        value.textContent = "\u2014";
+        head.appendChild(value);
+        el.appendChild(head);
+        const fill = document.createElement("div");
+        fill.className = "pm-fill";
+        el.appendChild(fill);
+        const detail = document.createElement("div");
+        detail.className = "pm-detail";
+        detail.id = detailId;
+        const detailContent = document.createElement("div");
+        detailContent.className = "pm-detail-content";
+        detail.appendChild(detailContent);
+        el.appendChild(detail);
+        head.addEventListener("click", () => {
+          const isOpen = el.classList.contains("pm-open");
+          if (isOpen) {
+            el.classList.remove("pm-open");
+            head.setAttribute("aria-expanded", "false");
+          } else {
+            el.classList.add("pm-open");
+            head.setAttribute("aria-expanded", "true");
+          }
         });
+        function update(stats) {
+          const newValue = section.value(stats);
+          value.textContent = newValue;
+          const pct = section.percent(stats);
+          if (pct !== null && pct !== void 0) {
+            let statusCls;
+            if (section.id === "app-lag") {
+              const lagMs = stats.nodeRed.eventLoopLag || 0;
+              statusCls = lagStatusClass(lagMs);
+              ringBuffer.push(lagMs);
+            } else {
+              statusCls = statusClass(pct);
+              ringBuffer.push(pct);
+            }
+            const clampedPct = Math.max(0, Math.min(100, pct));
+            fill.style.width = `${clampedPct}%`;
+            fill.classList.remove("pm-ok", "pm-warn", "pm-crit");
+            fill.classList.add(statusCls);
+          } else {
+            fill.style.width = "0%";
+            fill.classList.remove("pm-ok", "pm-warn", "pm-crit");
+          }
+          const detailRows = section.detail(stats);
+          detailContent.innerHTML = "";
+          if (detailRows && detailRows.length > 0) {
+            const grid = document.createElement("div");
+            grid.className = "pm-detail-grid";
+            detailRows.forEach((row) => {
+              const labelEl = document.createElement("div");
+              labelEl.className = "pm-detail-label";
+              labelEl.textContent = row.label;
+              grid.appendChild(labelEl);
+              const valueEl = document.createElement("div");
+              valueEl.className = "pm-detail-value";
+              valueEl.textContent = row.value;
+              grid.appendChild(valueEl);
+            });
+            detailContent.appendChild(grid);
+          }
+          if (section.sparkKey && ringBuffer.values().length > 0) {
+            const svg = sparkline(ringBuffer.values(), { width: 100, height: 16 });
+            const sparkContainer = document.createElement("div");
+            sparkContainer.className = "pm-sparkline-container";
+            sparkContainer.innerHTML = svg;
+            detailContent.appendChild(sparkContainer);
+          }
+        }
+        return { el, update };
+      }
+      module.exports = { metricRow };
+    }
+  });
 
-        // Inject header widget
-        injectHeaderWidget();
+  // src/editor/api.js
+  var require_api = __commonJS({
+    "src/editor/api.js"(exports, module) {
+      "use strict";
+      function admin(path) {
+        return (RED.settings.apiRootUrl || "") + path;
+      }
+      function getJSON(path) {
+        return new Promise((resolve, reject) => {
+          $.ajax({ url: admin(path), dataType: "json", success: resolve, error: (xhr) => reject(new Error("HTTP " + xhr.status)) });
+        });
+      }
+      function getStats() {
+        return getJSON("performance-monitor/stats");
+      }
+      function getSettings2() {
+        return getJSON("performance-monitor/settings");
+      }
+      function saveSettings(obj) {
+        return new Promise((resolve, reject) => {
+          $.ajax({ url: admin("performance-monitor/settings"), method: "POST", contentType: "application/json", data: JSON.stringify(obj), success: resolve, error: (xhr) => reject(new Error("HTTP " + xhr.status)) });
+        });
+      }
+      module.exports = { getStats, getSettings: getSettings2, saveSettings };
+    }
+  });
 
-        // Initialize
-        loadSettings();
-        restartTimer();
-    })();
+  // src/editor/sidebar/sidebar.js
+  var require_sidebar = __commonJS({
+    "src/editor/sidebar/sidebar.js"(exports, module) {
+      "use strict";
+      var { SECTIONS } = require_sections();
+      var { metricRow } = require_metric_row();
+      var { getStats } = require_api();
+      function buildSidebar2() {
+        const root = document.createElement("div");
+        root.className = "pm-sidebar";
+        let pollingInterval = null;
+        let isPaused = false;
+        const rows = [];
+        const externalUpdaters = [];
+        const toolbar = document.createElement("div");
+        toolbar.className = "pm-toolbar";
+        const statusEl = document.createElement("div");
+        statusEl.className = "pm-status pm-status-online";
+        const statusDot = document.createElement("span");
+        statusDot.className = "pm-status-dot";
+        const statusLabel = document.createElement("span");
+        statusLabel.className = "pm-status-label";
+        statusLabel.textContent = "ONLINE";
+        statusEl.appendChild(statusDot);
+        statusEl.appendChild(statusLabel);
+        toolbar.appendChild(statusEl);
+        const spacer = document.createElement("div");
+        spacer.style.flex = "1";
+        toolbar.appendChild(spacer);
+        const pauseBtn = document.createElement("button");
+        pauseBtn.className = "pm-toolbar-btn";
+        pauseBtn.setAttribute("title", "Pause polling");
+        pauseBtn.innerHTML = '<i class="fa fa-pause"></i>';
+        pauseBtn.addEventListener("click", () => {
+          isPaused = !isPaused;
+          pauseBtn.classList.toggle("pm-paused", isPaused);
+          pauseBtn.setAttribute("title", isPaused ? "Resume polling" : "Pause polling");
+        });
+        toolbar.appendChild(pauseBtn);
+        const refreshBtn = document.createElement("button");
+        refreshBtn.className = "pm-toolbar-btn";
+        refreshBtn.setAttribute("title", "Force refresh");
+        refreshBtn.innerHTML = '<i class="fa fa-refresh"></i>';
+        refreshBtn.addEventListener("click", () => {
+          getStats().then((stats) => {
+            rows.forEach(({ row }) => row.update(stats));
+            externalUpdaters.forEach((fn) => fn(stats));
+            statusEl.className = "pm-status pm-status-online";
+            statusLabel.textContent = "ONLINE";
+          }).catch((err) => {
+            console.error("Refresh failed:", err);
+            statusEl.className = "pm-status pm-status-offline";
+            statusLabel.textContent = "OFFLINE";
+          });
+        });
+        toolbar.appendChild(refreshBtn);
+        const settingsBtn = document.createElement("button");
+        settingsBtn.className = "pm-toolbar-btn";
+        settingsBtn.setAttribute("title", "Settings");
+        settingsBtn.innerHTML = '<i class="fa fa-cog"></i>';
+        toolbar.appendChild(settingsBtn);
+        root.appendChild(toolbar);
+        const appGroupLabel = document.createElement("div");
+        appGroupLabel.className = "pm-group-head";
+        appGroupLabel.textContent = "Application";
+        root.appendChild(appGroupLabel);
+        const appSection = document.createElement("div");
+        appSection.className = "pm-group";
+        SECTIONS.filter((s) => s.group === "app").forEach((section) => {
+          const { el, update } = metricRow(section);
+          appSection.appendChild(el);
+          rows.push({ section, row: { update } });
+        });
+        root.appendChild(appSection);
+        const sysGroupLabel = document.createElement("div");
+        sysGroupLabel.className = "pm-group-head";
+        sysGroupLabel.textContent = "System";
+        root.appendChild(sysGroupLabel);
+        const sysSection = document.createElement("div");
+        sysSection.className = "pm-group";
+        SECTIONS.filter((s) => s.group === "sys").forEach((section) => {
+          const { el, update } = metricRow(section);
+          sysSection.appendChild(el);
+          rows.push({ section, row: { update } });
+        });
+        root.appendChild(sysSection);
+        function start(interval = 2e3) {
+          if (pollingInterval) return;
+          function poll() {
+            if (isPaused) return;
+            getStats().then((stats) => {
+              rows.forEach(({ row }) => row.update(stats));
+              externalUpdaters.forEach((fn) => fn(stats));
+              statusEl.className = "pm-status pm-status-online";
+              statusLabel.textContent = "ONLINE";
+            }).catch((err) => {
+              console.error("Poll failed:", err);
+              statusEl.className = "pm-status pm-status-offline";
+              statusLabel.textContent = "OFFLINE";
+            });
+          }
+          poll();
+          pollingInterval = setInterval(poll, interval);
+        }
+        function stop() {
+          if (pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+          }
+        }
+        function restartPolling(newInterval) {
+          stop();
+          start(newInterval);
+        }
+        function registerExternalUpdater(fn) {
+          externalUpdaters.push(fn);
+        }
+        return {
+          el: root,
+          start,
+          stop,
+          restartPolling,
+          registerExternalUpdater
+        };
+      }
+      module.exports = { buildSidebar: buildSidebar2 };
+    }
+  });
+
+  // src/editor/hud/header-widget.js
+  var require_header_widget = __commonJS({
+    "src/editor/hud/header-widget.js"(exports, module) {
+      "use strict";
+      var { formatBytes } = require_format();
+      var globalPeakRss = 0;
+      function initHud2() {
+        const header = document.getElementById("red-ui-header");
+        if (!header) {
+          console.warn("[pm-hud] NR5 header not found, HUD disabled");
+          return { update: () => {
+          }, setVisible: () => {
+          }, destroy: () => {
+          } };
+        }
+        const toolbar = document.getElementById("red-ui-header-toolbar");
+        if (!toolbar) {
+          console.warn("[pm-hud] NR5 header toolbar not found, HUD disabled");
+          return { update: () => {
+          }, setVisible: () => {
+          }, destroy: () => {
+          } };
+        }
+        let hudEl = document.getElementById("pm-hud");
+        if (hudEl) {
+          const peakRssData = hudEl.getAttribute("data-peak-rss");
+          if (peakRssData) {
+            globalPeakRss = parseInt(peakRssData, 10);
+          }
+          return createHudInterface(hudEl);
+        }
+        hudEl = document.createElement("div");
+        hudEl.id = "pm-hud";
+        hudEl.className = "pm-hud";
+        hudEl.setAttribute("data-peak-rss", String(globalPeakRss));
+        const metricsContainer = document.createElement("div");
+        metricsContainer.className = "pm-hud-metrics";
+        function createMetric(label, metric) {
+          const metricEl = document.createElement("div");
+          metricEl.className = "pm-hud-metric";
+          metricEl.setAttribute("data-metric", metric);
+          const labelEl = document.createElement("span");
+          labelEl.className = "pm-hud-label";
+          labelEl.textContent = label;
+          const valueEl = document.createElement("span");
+          valueEl.className = "pm-hud-value";
+          valueEl.textContent = "\u2014";
+          const fillEl = document.createElement("div");
+          fillEl.className = "pm-hud-fill";
+          metricEl.appendChild(fillEl);
+          metricEl.appendChild(labelEl);
+          metricEl.appendChild(valueEl);
+          return { el: metricEl, valueEl, fillEl };
+        }
+        const cpuMetric = createMetric("CPU", "cpu");
+        metricsContainer.appendChild(cpuMetric.el);
+        const sep1 = document.createElement("div");
+        sep1.className = "pm-hud-separator";
+        metricsContainer.appendChild(sep1);
+        const rssMetric = createMetric("RSS", "rss");
+        metricsContainer.appendChild(rssMetric.el);
+        const sep2 = document.createElement("div");
+        sep2.className = "pm-hud-separator";
+        metricsContainer.appendChild(sep2);
+        const lagMetric = createMetric("LAG", "lag");
+        metricsContainer.appendChild(lagMetric.el);
+        const sep3 = document.createElement("div");
+        sep3.className = "pm-hud-separator";
+        metricsContainer.appendChild(sep3);
+        const peakMetric = document.createElement("div");
+        peakMetric.className = "pm-hud-metric";
+        peakMetric.setAttribute("data-metric", "peak");
+        const peakLabel = document.createElement("span");
+        peakLabel.className = "pm-hud-label";
+        peakLabel.textContent = "PEAK";
+        const peakValue = document.createElement("span");
+        peakValue.className = "pm-hud-value";
+        peakValue.textContent = "\u2014";
+        peakMetric.appendChild(peakLabel);
+        peakMetric.appendChild(peakValue);
+        metricsContainer.appendChild(peakMetric);
+        hudEl.appendChild(metricsContainer);
+        header.insertBefore(hudEl, toolbar);
+        return {
+          update(stats) {
+            if (!stats) return;
+            const cpu = stats.nodeRed?.cpu?.percentage ?? 0;
+            cpuMetric.valueEl.textContent = cpu.toFixed(1) + "%";
+            const cpuFill = Math.min(cpu, 100);
+            cpuMetric.fillEl.style.width = cpuFill + "%";
+            const rss = stats.nodeRed?.memory?.rss ?? 0;
+            rssMetric.valueEl.textContent = formatBytes(rss);
+            if (rss > globalPeakRss) {
+              globalPeakRss = rss;
+              hudEl.setAttribute("data-peak-rss", String(globalPeakRss));
+            }
+            const rssFill = globalPeakRss > 0 ? Math.min(rss / globalPeakRss * 100, 100) : 0;
+            rssMetric.fillEl.style.width = rssFill + "%";
+            const peakValue2 = peakMetric.querySelector(".pm-hud-value");
+            peakValue2.textContent = formatBytes(globalPeakRss);
+            const lag = stats.nodeRed?.eventLoop?.lagMs ?? 0;
+            lagMetric.valueEl.textContent = lag.toFixed(0) + " ms";
+            const lagFill = Math.min(lag / 50 * 100, 100);
+            lagMetric.fillEl.style.width = lagFill + "%";
+          },
+          setVisible(visible) {
+            hudEl.style.display = visible ? "" : "none";
+          },
+          destroy() {
+            if (hudEl && hudEl.parentElement) {
+              hudEl.parentElement.removeChild(hudEl);
+            }
+          }
+        };
+      }
+      function createHudInterface(hudEl) {
+        return {
+          update(stats) {
+            if (!stats) return;
+            const cpuMetricEl = hudEl.querySelector('[data-metric="cpu"]');
+            const rssMetricEl = hudEl.querySelector('[data-metric="rss"]');
+            const lagMetricEl = hudEl.querySelector('[data-metric="lag"]');
+            const peakMetricEl = hudEl.querySelector('[data-metric="peak"]');
+            if (cpuMetricEl) {
+              const cpuValue = cpuMetricEl.querySelector(".pm-hud-value");
+              const cpuFill = cpuMetricEl.querySelector(".pm-hud-fill");
+              const cpu = stats.nodeRed?.cpu?.percentage ?? 0;
+              if (cpuValue) cpuValue.textContent = cpu.toFixed(1) + "%";
+              if (cpuFill) cpuFill.style.width = Math.min(cpu, 100) + "%";
+            }
+            if (rssMetricEl) {
+              const rssValue = rssMetricEl.querySelector(".pm-hud-value");
+              const rssFill = rssMetricEl.querySelector(".pm-hud-fill");
+              const rss = stats.nodeRed?.memory?.rss ?? 0;
+              if (rssValue) rssValue.textContent = formatBytes(rss);
+              if (rss > globalPeakRss) {
+                globalPeakRss = rss;
+                hudEl.setAttribute("data-peak-rss", String(globalPeakRss));
+              }
+              if (rssFill) {
+                const rssFillPct = globalPeakRss > 0 ? Math.min(rss / globalPeakRss * 100, 100) : 0;
+                rssFill.style.width = rssFillPct + "%";
+              }
+            }
+            if (peakMetricEl) {
+              const peakValue = peakMetricEl.querySelector(".pm-hud-value");
+              if (peakValue) peakValue.textContent = formatBytes(globalPeakRss);
+            }
+            if (lagMetricEl) {
+              const lagValue = lagMetricEl.querySelector(".pm-hud-value");
+              const lagFill = lagMetricEl.querySelector(".pm-hud-fill");
+              const lag = stats.nodeRed?.eventLoop?.lagMs ?? 0;
+              if (lagValue) lagValue.textContent = lag.toFixed(0) + " ms";
+              if (lagFill) lagFill.style.width = Math.min(lag / 50 * 100, 100) + "%";
+            }
+          },
+          setVisible(visible) {
+            hudEl.style.display = visible ? "" : "none";
+          },
+          destroy() {
+            if (hudEl && hudEl.parentElement) {
+              hudEl.parentElement.removeChild(hudEl);
+            }
+          }
+        };
+      }
+      module.exports = { initHud: initHud2 };
+    }
+  });
+
+  // src/editor/sidebar/settings.js
+  var require_settings = __commonJS({
+    "src/editor/sidebar/settings.js"(exports, module) {
+      "use strict";
+      var { getSettings: getSettings2, saveSettings } = require_api();
+      function openSettings2(opts = {}) {
+        const { current = {}, onRestartPolling, onToggleHud, onClose } = opts;
+        const panelEl = document.createElement("div");
+        panelEl.className = "pm-settings-panel";
+        const headerEl = document.createElement("div");
+        headerEl.className = "pm-settings-header";
+        const titleEl = document.createElement("h3");
+        titleEl.className = "pm-settings-title";
+        titleEl.textContent = "Settings";
+        const closeBtn = document.createElement("button");
+        closeBtn.className = "pm-settings-close";
+        closeBtn.setAttribute("title", "Close settings");
+        closeBtn.innerHTML = '<i class="fa fa-times"></i>';
+        headerEl.appendChild(titleEl);
+        headerEl.appendChild(closeBtn);
+        panelEl.appendChild(headerEl);
+        const formEl = document.createElement("form");
+        formEl.className = "pm-settings-form";
+        const refreshFieldEl = document.createElement("div");
+        refreshFieldEl.className = "pm-settings-field";
+        const refreshLabelEl = document.createElement("label");
+        refreshLabelEl.className = "pm-settings-label";
+        refreshLabelEl.textContent = "Refresh interval (ms)";
+        const refreshInputEl = document.createElement("input");
+        refreshInputEl.type = "number";
+        refreshInputEl.className = "pm-settings-input";
+        refreshInputEl.min = "500";
+        refreshInputEl.max = "60000";
+        refreshInputEl.value = current.refreshIntervalMs || 2e3;
+        refreshInputEl.setAttribute("title", "Minimum 500ms");
+        refreshFieldEl.appendChild(refreshLabelEl);
+        refreshFieldEl.appendChild(refreshInputEl);
+        formEl.appendChild(refreshFieldEl);
+        const retentionFieldEl = document.createElement("div");
+        retentionFieldEl.className = "pm-settings-field";
+        const retentionLabelEl = document.createElement("label");
+        retentionLabelEl.className = "pm-settings-label";
+        retentionLabelEl.textContent = "History retention (days)";
+        const retentionInputEl = document.createElement("input");
+        retentionInputEl.type = "number";
+        retentionInputEl.className = "pm-settings-input";
+        retentionInputEl.min = "1";
+        retentionInputEl.max = "365";
+        retentionInputEl.value = current.retentionDays || 30;
+        retentionInputEl.setAttribute("title", "Minimum 1 day");
+        retentionFieldEl.appendChild(retentionLabelEl);
+        retentionFieldEl.appendChild(retentionInputEl);
+        formEl.appendChild(retentionFieldEl);
+        const maxDbFieldEl = document.createElement("div");
+        maxDbFieldEl.className = "pm-settings-field";
+        const maxDbLabelEl = document.createElement("label");
+        maxDbLabelEl.className = "pm-settings-label";
+        maxDbLabelEl.textContent = "Max DB size (MB)";
+        const maxDbInputEl = document.createElement("input");
+        maxDbInputEl.type = "number";
+        maxDbInputEl.className = "pm-settings-input";
+        maxDbInputEl.min = "10";
+        maxDbInputEl.max = "10000";
+        maxDbInputEl.value = current.maxDbSizeMB || 100;
+        maxDbInputEl.setAttribute("title", "Minimum 10 MB");
+        maxDbFieldEl.appendChild(maxDbLabelEl);
+        maxDbFieldEl.appendChild(maxDbInputEl);
+        formEl.appendChild(maxDbFieldEl);
+        const hudFieldEl = document.createElement("div");
+        hudFieldEl.className = "pm-settings-field pm-settings-checkbox-field";
+        const hudCheckboxEl = document.createElement("input");
+        hudCheckboxEl.type = "checkbox";
+        hudCheckboxEl.className = "pm-settings-checkbox";
+        hudCheckboxEl.id = "pm-settings-hide-hud";
+        hudCheckboxEl.checked = current.hideHud || false;
+        const hudLabelEl = document.createElement("label");
+        hudLabelEl.htmlFor = "pm-settings-hide-hud";
+        hudLabelEl.className = "pm-settings-checkbox-label";
+        hudLabelEl.textContent = "Hide header HUD";
+        hudFieldEl.appendChild(hudCheckboxEl);
+        hudFieldEl.appendChild(hudLabelEl);
+        formEl.appendChild(hudFieldEl);
+        const buttonContainerEl = document.createElement("div");
+        buttonContainerEl.className = "pm-settings-buttons";
+        const saveBtn = document.createElement("button");
+        saveBtn.type = "button";
+        saveBtn.className = "pm-settings-btn pm-settings-btn-save";
+        saveBtn.textContent = "Save";
+        const cancelBtn = document.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.className = "pm-settings-btn pm-settings-btn-cancel";
+        cancelBtn.textContent = "Cancel";
+        buttonContainerEl.appendChild(saveBtn);
+        buttonContainerEl.appendChild(cancelBtn);
+        formEl.appendChild(buttonContainerEl);
+        panelEl.appendChild(formEl);
+        const close = () => {
+          if (panelEl.parentElement) {
+            panelEl.parentElement.removeChild(panelEl);
+          }
+          if (onClose) {
+            onClose();
+          }
+        };
+        saveBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          const refreshMs = parseInt(refreshInputEl.value, 10);
+          const retentionDays = parseInt(retentionInputEl.value, 10);
+          const maxDbMb = parseInt(maxDbInputEl.value, 10);
+          const hideHud = hudCheckboxEl.checked;
+          if (!Number.isInteger(refreshMs) || refreshMs < 500) {
+            alert("Refresh interval must be at least 500ms");
+            refreshInputEl.focus();
+            return;
+          }
+          if (!Number.isInteger(retentionDays) || retentionDays < 1) {
+            alert("History retention must be at least 1 day");
+            retentionInputEl.focus();
+            return;
+          }
+          if (!Number.isInteger(maxDbMb) || maxDbMb < 10) {
+            alert("Max DB size must be at least 10 MB");
+            maxDbInputEl.focus();
+            return;
+          }
+          const newSettings = {
+            refreshIntervalMs: refreshMs,
+            retentionDays,
+            maxDbSizeMB: maxDbMb,
+            hideHud
+          };
+          saveSettings(newSettings).then(() => {
+            if (onRestartPolling && refreshMs !== current.refreshIntervalMs) {
+              onRestartPolling(refreshMs);
+            }
+            if (onToggleHud && hideHud !== current.hideHud) {
+              onToggleHud(!hideHud);
+            }
+            close();
+          }).catch((err) => {
+            console.error("Failed to save settings:", err);
+            alert("Failed to save settings: " + err.message);
+          });
+        });
+        cancelBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          close();
+        });
+        closeBtn.addEventListener("click", () => {
+          close();
+        });
+        return { el: panelEl, close };
+      }
+      module.exports = { openSettings: openSettings2 };
+    }
+  });
+
+  // src/editor/styles.css
+  var styles_default = ".pm-root { padding: 8px; color: var(--red-ui-primary-text-color, #333); font-size: 12px; }\n\n/* Sidebar container */\n.pm-sidebar {\n  display: flex;\n  flex-direction: column;\n  height: 100%;\n  color: var(--red-ui-primary-text-color);\n  font-size: 12px;\n}\n\n/* Toolbar at top */\n.pm-toolbar {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  height: 32px;\n  padding: 4px 8px;\n  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));\n  flex-shrink: 0;\n}\n\n/* Toolbar buttons */\n.pm-toolbar-btn {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  width: 24px;\n  height: 24px;\n  padding: 0;\n  background: none;\n  border: 1px solid transparent;\n  border-radius: 2px;\n  color: var(--red-ui-secondary-text-color);\n  cursor: pointer;\n  font-size: 12px;\n  transition: background-color 0.15s ease;\n}\n\n.pm-toolbar-btn:hover {\n  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.05));\n}\n\n.pm-toolbar-btn:active {\n  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.1));\n}\n\n.pm-toolbar-btn.pm-paused {\n  color: var(--red-ui-text-color-warning, #ff9800);\n}\n\n/* Status indicator */\n.pm-status {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  font-size: 11px;\n  font-weight: 600;\n  flex-shrink: 0;\n  letter-spacing: 0.05em;\n  color: var(--red-ui-secondary-text-color, #666);\n}\n\n.pm-status-dot {\n  display: inline-block;\n  width: 8px;\n  height: 8px;\n  border-radius: 50%;\n  flex-shrink: 0;\n}\n\n.pm-status-label {\n  white-space: nowrap;\n}\n\n.pm-status-online .pm-status-dot {\n  background: var(--red-ui-text-color-success, #5a5);\n}\n\n.pm-status-offline .pm-status-dot {\n  background: var(--red-ui-text-color-error, #c33);\n}\n\n/* Metric row structure */\n.pm-row {\n  position: relative;\n  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);\n}\n\n/* Row header button */\n.pm-row-head {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  height: 26px;\n  padding: 0 8px;\n  background: none;\n  border: 0;\n  width: 100%;\n  cursor: pointer;\n  color: var(--red-ui-primary-text-color);\n  font-size: 12px;\n  font-family: inherit;\n  text-align: left;\n}\n\n.pm-row-head:hover {\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));\n}\n\n.pm-row-head:active {\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.05));\n}\n\n/* Icon styling */\n.pm-row-head .fa {\n  flex-shrink: 0;\n  width: 16px;\n  text-align: center;\n  color: var(--red-ui-secondary-text-color);\n}\n\n/* Label styling */\n.pm-row-head .pm-label {\n  flex: 1;\n  text-align: left;\n  color: var(--red-ui-secondary-text-color);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n/* Value styling with tabular numbers for alignment */\n.pm-row-head .pm-value {\n  font-variant-numeric: tabular-nums;\n  color: var(--red-ui-primary-text-color);\n  flex-shrink: 0;\n  white-space: nowrap;\n}\n\n/* Fill bar (status indicator) */\n.pm-fill {\n  position: absolute;\n  bottom: 0;\n  left: 0;\n  height: 2px;\n  width: 0;\n  background: var(--red-ui-text-color-link);\n  transition: width 0.2s ease, background-color 0.2s ease;\n}\n\n/* Status color classes */\n.pm-fill.pm-ok {\n  background: var(--red-ui-text-color-success, #3a3);\n}\n\n.pm-fill.pm-warn {\n  background: var(--red-ui-secondary-border-color, #f0ad4e);\n}\n\n.pm-fill.pm-crit {\n  background: var(--red-ui-text-color-error, #c33);\n}\n\n/* Detail panel (collapsed by default) */\n.pm-detail {\n  display: none;\n  padding: 4px 8px 8px 24px;\n  color: var(--red-ui-primary-text-color);\n  font-size: 11px;\n}\n\n/* Show detail when row is open */\n.pm-open .pm-detail {\n  display: block;\n}\n\n/* Detail grid layout for label-value pairs */\n.pm-detail-grid {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 4px 12px;\n  margin-bottom: 8px;\n}\n\n.pm-detail-label {\n  color: var(--red-ui-tertiary-text-color);\n  font-weight: 500;\n}\n\n.pm-detail-value {\n  color: var(--red-ui-primary-text-color);\n  font-variant-numeric: tabular-nums;\n  text-align: right;\n}\n\n/* Sparkline container */\n.pm-sparkline-container {\n  margin-top: 8px;\n  border-top: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  padding-top: 8px;\n}\n\n.pm-spark {\n  width: 100%;\n  height: auto;\n  max-width: 100px;\n  display: inline-block;\n}\n\n/* Group headers */\n.pm-group-head {\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: 0.04em;\n  color: var(--red-ui-tertiary-text-color);\n  padding: 6px 8px 2px;\n  font-weight: 600;\n  margin-top: 8px;\n}\n\n.pm-group-head:first-child {\n  margin-top: 0;\n}\n\n/* Group container */\n.pm-group {\n  border: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  border-radius: 2px;\n  overflow: hidden;\n}\n\n/* ===== Header HUD ===== */\n.pm-hud {\n  display: flex;\n  align-items: center;\n  gap: 0;\n  height: 100%;\n  padding: 0 8px;\n  color: var(--red-ui-primary-text-color, #333);\n  font-size: 11px;\n}\n\n.pm-hud-metrics {\n  display: flex;\n  align-items: center;\n  gap: 0;\n  height: 100%;\n}\n\n.pm-hud-metric {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  justify-content: center;\n  gap: 2px;\n  padding: 0 6px;\n  white-space: nowrap;\n  position: relative;\n}\n\n.pm-hud-label {\n  font-size: 9px;\n  font-weight: 600;\n  letter-spacing: 0.05em;\n  text-transform: uppercase;\n  color: var(--red-ui-tertiary-text-color, #999);\n}\n\n.pm-hud-value {\n  font-size: 11px;\n  font-weight: 500;\n  font-variant-numeric: tabular-nums;\n  color: var(--red-ui-primary-text-color, #333);\n}\n\n.pm-hud-fill {\n  position: absolute;\n  bottom: 0;\n  left: 0;\n  height: 2px;\n  width: 0;\n  background: var(--red-ui-text-color-link, #0084ff);\n  transition: width 0.6s ease;\n  opacity: 0.6;\n  border-radius: 1px;\n}\n\n.pm-hud-separator {\n  width: 1px;\n  height: 16px;\n  background: var(--red-ui-tertiary-border-color, #ddd);\n  margin: 0 4px;\n}\n\n/* ===== Settings Panel ===== */\n.pm-settings-panel {\n  display: flex;\n  flex-direction: column;\n  padding: 8px;\n  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));\n}\n\n.pm-settings-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  margin-bottom: 12px;\n  gap: 8px;\n}\n\n.pm-settings-title {\n  font-size: 13px;\n  font-weight: 600;\n  color: var(--red-ui-primary-text-color);\n  margin: 0;\n  padding: 0;\n}\n\n.pm-settings-close {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  width: 20px;\n  height: 20px;\n  padding: 0;\n  background: none;\n  border: 1px solid transparent;\n  border-radius: 2px;\n  color: var(--red-ui-secondary-text-color);\n  cursor: pointer;\n  font-size: 11px;\n  transition: background-color 0.15s ease;\n}\n\n.pm-settings-close:hover {\n  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.05));\n}\n\n.pm-settings-form {\n  display: flex;\n  flex-direction: column;\n  gap: 10px;\n}\n\n.pm-settings-field {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n\n.pm-settings-label {\n  font-size: 11px;\n  font-weight: 500;\n  color: var(--red-ui-secondary-text-color);\n  display: block;\n}\n\n.pm-settings-input {\n  padding: 4px 6px;\n  font-size: 11px;\n  border: 1px solid var(--red-ui-tertiary-border-color, #ccc);\n  border-radius: 2px;\n  background: var(--red-ui-primary-background, #fff);\n  color: var(--red-ui-primary-text-color);\n  font-family: inherit;\n}\n\n.pm-settings-input:focus {\n  outline: none;\n  border-color: var(--red-ui-text-color-link, #0084ff);\n  box-shadow: 0 0 0 2px var(--red-ui-text-color-link, rgba(0, 132, 255, 0.1));\n}\n\n/* Checkbox field layout */\n.pm-settings-checkbox-field {\n  flex-direction: row;\n  align-items: center;\n  gap: 6px;\n  margin-top: 4px;\n}\n\n.pm-settings-checkbox {\n  width: 16px;\n  height: 16px;\n  cursor: pointer;\n  accent-color: var(--red-ui-text-color-link, #0084ff);\n}\n\n.pm-settings-checkbox-label {\n  font-size: 11px;\n  color: var(--red-ui-primary-text-color);\n  cursor: pointer;\n  user-select: none;\n}\n\n.pm-settings-buttons {\n  display: flex;\n  gap: 6px;\n  margin-top: 8px;\n  justify-content: flex-end;\n}\n\n.pm-settings-btn {\n  padding: 6px 12px;\n  font-size: 11px;\n  font-weight: 500;\n  border: 1px solid transparent;\n  border-radius: 2px;\n  cursor: pointer;\n  font-family: inherit;\n  transition: background-color 0.15s ease, color 0.15s ease;\n}\n\n.pm-settings-btn-save {\n  background: var(--red-ui-text-color-link, #0084ff);\n  color: var(--red-ui-primary-background, #fff);\n}\n\n.pm-settings-btn-save:hover {\n  background: var(--red-ui-text-color-link, #0066cc);\n}\n\n.pm-settings-btn-cancel {\n  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.05));\n  color: var(--red-ui-primary-text-color);\n  border: 1px solid var(--red-ui-tertiary-border-color, #ccc);\n}\n\n.pm-settings-btn-cancel:hover {\n  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.1));\n}\n";
+
+  // src/editor/index.js
+  var import_sidebar = __toESM(require_sidebar());
+  var import_header_widget = __toESM(require_header_widget());
+  var import_api = __toESM(require_api());
+  var import_settings = __toESM(require_settings());
+  (function() {
+    "use strict";
+    const styleEl = document.createElement("style");
+    styleEl.textContent = styles_default;
+    document.head.appendChild(styleEl);
+    const { el: sidebarEl, start, stop, restartPolling, registerExternalUpdater } = (0, import_sidebar.buildSidebar)();
+    RED.plugins.registerPlugin("performance-monitor", {
+      type: "performance-monitor",
+      onadd() {
+      }
+    });
+    const tab = RED.sidebar.addTab({
+      id: "performance-monitor",
+      name: "Performance Monitor",
+      iconClass: "fa fa-tachometer",
+      content: sidebarEl
+    });
+    const hud = (0, import_header_widget.initHud)();
+    registerExternalUpdater((stats) => hud.update(stats));
+    let currentSettingsPanel = null;
+    const settingsBtn = sidebarEl.querySelector(".pm-toolbar-btn:last-child");
+    if (settingsBtn) {
+      settingsBtn.addEventListener("click", async () => {
+        if (currentSettingsPanel) {
+          currentSettingsPanel.close();
+          currentSettingsPanel = null;
+          return;
+        }
+        try {
+          const currentSettings = await (0, import_api.getSettings)();
+          const { el: panelEl, close } = (0, import_settings.openSettings)({
+            current: currentSettings,
+            onRestartPolling: (newInterval) => {
+              restartPolling(newInterval);
+            },
+            onToggleHud: (show) => {
+              hud.setVisible(show);
+            },
+            onClose: () => {
+              currentSettingsPanel = null;
+            }
+          });
+          sidebarEl.insertBefore(panelEl, sidebarEl.querySelector(".pm-group-head"));
+          currentSettingsPanel = { close };
+        } catch (err) {
+          console.error("Failed to open settings:", err);
+          alert("Failed to load settings: " + err.message);
+        }
+      });
+    }
+    start();
+    if (RED.events && RED.events.on) {
+      try {
+        RED.events.on("shutdown", () => {
+          stop();
+        });
+      } catch (err) {
+      }
+    }
+  })();
+})();
+
 </script>

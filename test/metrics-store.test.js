@@ -26,8 +26,8 @@ describe('MetricsStore', function () {
     });
 
     it('applies WAL mode on open', function () {
-        const mode = store._db.prepare('PRAGMA journal_mode').get();
-        assert.strictEqual(mode.journal_mode, 'wal');
+        const row = store._db.prepare('PRAGMA journal_mode').get();
+        assert.strictEqual(String(row.journal_mode).toLowerCase(), 'wal');
     });
 
     it('flushes a system sample', function () {
@@ -301,6 +301,39 @@ describe('MetricsStore events', function () {
         assert.strictEqual(events.length, 1);
         assert.strictEqual(events[0].kind, 'deploy');
         assert.deepStrictEqual(JSON.parse(events[0].detail), { by: 'admin' });
+    });
+});
+
+describe('MetricsStore degraded reads never throw', function () {
+    let store;
+    beforeEach(function () {
+        store = new MetricsStore({ dbPath: '/nope/does/not/exist/pm.db' });
+        store.openOrDegrade();
+    });
+    afterEach(function () { store.close(); });
+
+    it('is degraded', function () {
+        assert.strictEqual(store.isDegraded(), true);
+    });
+
+    it('read methods return safe empties instead of throwing', function () {
+        const now = Date.now();
+        assert.deepStrictEqual(store.getRange(now - 1000, now), []);
+        assert.deepStrictEqual(store.getRange(now - 1000, now, { bucketMs: 1000 }), []);
+        assert.deepStrictEqual(store.getNodeStats('n1', now - 1000, now), []);
+        assert.deepStrictEqual(store.getTopNodes(now - 1000, now, { metric: 'msg_count' }), []);
+        assert.deepStrictEqual(store.getEvents(now - 1000, now), []);
+        assert.deepStrictEqual(store.getSummary(1000), {});
+        assert.deepStrictEqual(store.getAlarmRules(), []);
+    });
+
+    it('runRetention is a no-op in degraded mode', function () {
+        const seen = [];
+        store.on('retention', e => seen.push(e));
+        const r = store.runRetention();
+        assert.deepStrictEqual(r, { deletedSamples: 0, deletedNodeSamples: 0, deletedEvents: 0, cutoff: r.cutoff });
+        assert.strictEqual(seen.length, 1, 'retention event must be emitted');
+        assert.deepStrictEqual(seen[0], r, 'event payload must match return value');
     });
 });
 
