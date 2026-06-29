@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    name: build & test (Node ${{ matrix.node-version }})
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - name: Build editor bundle
+        run: npm run build
+      - name: Verify committed performance-monitor.html is in sync with src/editor
+        run: git diff --exit-code -- performance-monitor.html
+      - run: npm test

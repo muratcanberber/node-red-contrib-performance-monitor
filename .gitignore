@@ -21,3 +21,11 @@ test-results/
 
 # Worktrees
 .worktrees/
+
+# Runtime artifacts
+*.db
+*.db-wal
+*.db-shm
+
+# Superpowers scratch (specs/plans live in docs/superpowers/)
+.superpowers/

@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-06-30
+
+The Node-RED 5 release: rebuilt UI, native-dependency-free storage, and a much
+cleaner package.
+
+### Added
+- **Compact sidebar** — every metric is a dense single-line row with an inline
+  status bar; click a row to expand history, sub-values, and a sparkline.
+- **Animated header HUD** — CPU / RSS / event-loop lag / session-peak memory with
+  lightweight CSS-transition bar fills (no animation loop, no extra CPU cost).
+- **Modular editor source** built with esbuild (`src/editor/` → bundled
+  `performance-monitor.html`); unit-tested pure-logic modules.
+- Native (Node-RED inherited) theming that follows the editor's light/dark theme
+  automatically.
+
+### Changed
+- **Storage migrated from `better-sqlite3` to Node's built-in `node:sqlite`** — no
+  native compilation, so installs are reliable on Alpine/ARM/containers and survive
+  Node upgrades. Falls back to in-memory history if SQLite is unavailable.
+- Minimum runtime is now **Node.js 22.9** (Node-RED 5 baseline); built and verified
+  for Node-RED 5.
+- Published package now ships only runtime files (`files` allowlist).
+
+### Removed
+- The four bundled themes (Classic/Funky/Matrix/Cyberpunk) and the theme/HUD-size
+  pickers — replaced by a single Node-RED-native look.
+- The `better-sqlite3` dependency.
+
+### Fixed
+- **Plugin no longer breaks on upgrade** — the previous native-module load failure on
+  a Node version change (which forced an uninstall/reinstall) is eliminated.
+- Flow node `perf-monitor` is now registered once (resolves the Node-RED 5
+  `perf-monitor already registered` warning).
+- Settings panel now toggles correctly from the toolbar gear.
+
 ## [2.0.0] - 2026-04-14
 
 ### Added

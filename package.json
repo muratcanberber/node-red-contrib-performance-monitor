@@ -1,13 +1,24 @@
 {
   "name": "node-red-contrib-performance-monitor",
-  "version": "2.3.0",
-  "description": "Node-RED performance monitor plugin with SQLite history, flow node, and anomaly detection.",
+  "version": "3.0.0",
+  "description": "Compact, Node-RED 5 native performance monitor: real-time CPU/memory/event-loop metrics, header HUD, node:sqlite history, flow node, and anomaly detection.",
   "main": "performance-monitor.js",
   "scripts": {
     "test": "mocha test/**/*.js --timeout 10000",
     "build": "node build/build.mjs",
-    "build:watch": "node build/build.mjs --watch"
+    "build:watch": "node build/build.mjs --watch",
+    "prepublishOnly": "npm run build && npm test"
   },
+  "files": [
+    "performance-monitor.js",
+    "performance-monitor.html",
+    "lib/",
+    "nodes/",
+    "docs/img/",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
   "keywords": [
     "node-red",
     "sidebar",
@@ -25,7 +36,7 @@
   "author": "Murat Can Berber",
   "license": "MIT",
   "node-red": {
-    "version": ">=1.1.0",
+    "version": ">=4.0.0",
     "plugins": {
       "performance-monitor": "performance-monitor.js"
     },
