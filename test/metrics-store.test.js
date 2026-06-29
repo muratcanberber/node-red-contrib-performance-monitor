@@ -26,8 +26,8 @@ describe('MetricsStore', function () {
     });
 
     it('applies WAL mode on open', function () {
-        const mode = store._db.prepare('PRAGMA journal_mode').get();
-        assert.strictEqual(mode.journal_mode, 'wal');
+        const row = store._db.prepare('PRAGMA journal_mode').get();
+        assert.strictEqual(String(row.journal_mode).toLowerCase(), 'wal');
     });
 
     it('flushes a system sample', function () {
