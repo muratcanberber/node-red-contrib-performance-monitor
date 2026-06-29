@@ -280,3 +280,142 @@
   background: var(--red-ui-tertiary-border-color, #ddd);
   margin: 0 4px;
 }
+
+/* ===== Settings Panel ===== */
+.pm-settings-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);
+  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));
+}
+
+.pm-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+
+.pm-settings-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--red-ui-primary-text-color);
+  margin: 0;
+  padding: 0;
+}
+
+.pm-settings-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: var(--red-ui-secondary-text-color);
+  cursor: pointer;
+  font-size: 11px;
+  transition: background-color 0.15s ease;
+}
+
+.pm-settings-close:hover {
+  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.05));
+}
+
+.pm-settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pm-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pm-settings-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--red-ui-secondary-text-color);
+  display: block;
+}
+
+.pm-settings-input {
+  padding: 4px 6px;
+  font-size: 11px;
+  border: 1px solid var(--red-ui-tertiary-border-color, #ccc);
+  border-radius: 2px;
+  background: var(--red-ui-primary-background, #fff);
+  color: var(--red-ui-primary-text-color);
+  font-family: inherit;
+}
+
+.pm-settings-input:focus {
+  outline: none;
+  border-color: var(--red-ui-text-color-link, #0084ff);
+  box-shadow: 0 0 0 2px var(--red-ui-text-color-link, rgba(0, 132, 255, 0.1));
+}
+
+/* Checkbox field layout */
+.pm-settings-checkbox-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.pm-settings-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--red-ui-text-color-link, #0084ff);
+}
+
+.pm-settings-checkbox-label {
+  font-size: 11px;
+  color: var(--red-ui-primary-text-color);
+  cursor: pointer;
+  user-select: none;
+}
+
+.pm-settings-buttons {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  justify-content: flex-end;
+}
+
+.pm-settings-btn {
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.pm-settings-btn-save {
+  background: var(--red-ui-text-color-link, #0084ff);
+  color: var(--red-ui-primary-background, #fff);
+}
+
+.pm-settings-btn-save:hover {
+  background: var(--red-ui-text-color-link, #0066cc);
+}
+
+.pm-settings-btn-cancel {
+  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.05));
+  color: var(--red-ui-primary-text-color);
+  border: 1px solid var(--red-ui-tertiary-border-color, #ccc);
+}
+
+.pm-settings-btn-cancel:hover {
+  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.1));
+}

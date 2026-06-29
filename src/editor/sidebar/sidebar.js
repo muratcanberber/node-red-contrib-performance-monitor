@@ -148,6 +148,11 @@ function buildSidebar() {
     }
   }
 
+  function restartPolling(newInterval) {
+    stop();
+    start(newInterval);
+  }
+
   function registerExternalUpdater(fn) {
     externalUpdaters.push(fn);
   }
@@ -156,6 +161,7 @@ function buildSidebar() {
     el: root,
     start,
     stop,
+    restartPolling,
     registerExternalUpdater,
   };
 }
