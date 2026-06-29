@@ -5,58 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.0.0] - 2026-06-30
+## [2.0.0] - 2026-06-30
 
-The Node-RED 5 release: rebuilt UI, native-dependency-free storage, and a much
-cleaner package.
+The Node-RED 5 release. A major step over 1.2.0: persistent history, a flow node,
+anomaly detection, and a fully rebuilt, compact, Node-RED-native UI — with **zero
+runtime dependencies** and reliable upgrades.
 
 ### Added
-- **Compact sidebar** — every metric is a dense single-line row with an inline
-  status bar; click a row to expand history, sub-values, and a sparkline.
+- **SQLite-backed history** via Node's built-in `node:sqlite` — configurable retention
+  and max-DB-size, with live SSE stream (`/stream`) and query endpoints (`/recent`,
+  `/range`, `/summary`). Falls back to in-memory history if SQLite is unavailable.
+- **`perf-monitor` flow node** to read metrics inside flows.
+- **Anomaly detection** — built-in CPU spike / heap growth / event-loop block / traffic
+  patterns, plus user-defined fixed and statistical alarm rules; full-screen historical
+  report dashboard.
+- Per-node instrumentation via `RED.hooks` (msg count, avg process time, errors).
+- **Compact sidebar** — every metric is a dense single-line row with an inline status
+  bar; click a row to expand history, sub-values, and a sparkline.
 - **Animated header HUD** — CPU / RSS / event-loop lag / session-peak memory with
   lightweight CSS-transition bar fills (no animation loop, no extra CPU cost).
 - **Modular editor source** built with esbuild (`src/editor/` → bundled
-  `performance-monitor.html`); unit-tested pure-logic modules.
-- Native (Node-RED inherited) theming that follows the editor's light/dark theme
-  automatically.
+  `performance-monitor.html`); unit-tested pure-logic modules and CI on Node 22 & 24.
 
 ### Changed
-- **Storage migrated from `better-sqlite3` to Node's built-in `node:sqlite`** — no
-  native compilation, so installs are reliable on Alpine/ARM/containers and survive
-  Node upgrades. Falls back to in-memory history if SQLite is unavailable.
-- Minimum runtime is now **Node.js 22.9** (Node-RED 5 baseline); built and verified
-  for Node-RED 5.
-- Published package now ships only runtime files (`files` allowlist).
+- **BREAKING:** minimum runtime is now **Node.js 22.9** (Node-RED 5 baseline); built and
+  verified for Node-RED 5.
+- Native (Node-RED inherited) theming that follows the editor's light/dark theme
+  automatically — no theme configuration needed.
+- Published package ships only runtime files (`files` allowlist).
 
 ### Removed
-- The four bundled themes (Classic/Funky/Matrix/Cyberpunk) and the theme/HUD-size
-  pickers — replaced by a single Node-RED-native look.
-- The `better-sqlite3` dependency.
+- **BREAKING:** the four bundled themes (Classic/Funky/Matrix/Cyberpunk) and the
+  theme/HUD-size pickers — replaced by a single Node-RED-native look.
 
 ### Fixed
-- **Plugin no longer breaks on upgrade** — the previous native-module load failure on
-  a Node version change (which forced an uninstall/reinstall) is eliminated.
+- **No native dependencies, no upgrade breakage** — history uses built-in `node:sqlite`,
+  so there is no compiled addon to mismatch when Node is upgraded (the previous
+  `better-sqlite3` load failure that forced an uninstall/reinstall is eliminated).
 - Flow node `perf-monitor` is now registered once (resolves the Node-RED 5
   `perf-monitor already registered` warning).
 - Settings panel now toggles correctly from the toolbar gear.
 
-## [2.0.0] - 2026-04-14
-
-### Added
-- SQLite-backed metrics persistence (`performance-monitor.db` in Node-RED user dir).
-- Per-node instrumentation via `RED.hooks` (msg count, avg process time, errors).
-- Live SSE stream at `GET /performance-monitor/stream`.
-- Historical query endpoints (`/recent`, `/range`, `/summary`).
-- Retention + max-DB-size controls in settings UI.
-- Deploy/stop lifecycle markers recorded for future anomaly analysis.
-
-### Changed
-- **BREAKING**: now requires Node-RED ≥ 1.1.0 (hooks API).
-- **BREAKING**: drops "zero native dependencies" claim — adds `better-sqlite3` (ships prebuilt binaries).
-- Code reorganized into `lib/` modules (internal change).
-
-### Migration
-- First launch post-upgrade creates a fresh `performance-monitor.db`. No user action required.
+### Migration from 1.2.0
+- Requires Node.js ≥ 22.9 (Node-RED 5). History is created automatically on first start;
+  an existing `performance-monitor.db` is read as-is. No user action required.
 
 ---
 
