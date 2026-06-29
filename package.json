@@ -36,7 +36,7 @@
     "sinon": "^17.0.1"
   },
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=22.9.0"
   },
   "repository": {
     "type": "git",
@@ -46,7 +46,5 @@
     "url": "https://github.com/muratcanberber/node-red-contrib-performance-monitor/issues"
   },
   "homepage": "https://github.com/muratcanberber/node-red-contrib-performance-monitor#readme",
-  "dependencies": {
-    "better-sqlite3": "^11.10.0"
-  }
+  "dependencies": {}
 }

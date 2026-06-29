@@ -1,11 +1,11 @@
 const assert = require('assert');
-const Database = require('better-sqlite3');
+const { DatabaseSync } = require('node:sqlite');
 const { runMigrations, CURRENT_VERSION } = require('../lib/migrations');
 
 describe('migrations', function () {
     let db;
 
-    beforeEach(function () { db = new Database(':memory:'); });
+    beforeEach(function () { db = new DatabaseSync(':memory:'); });
     afterEach(function () { db.close(); });
 
     it('creates schema and meta on fresh DB', function () {
@@ -43,14 +43,14 @@ describe('migrations', function () {
     });
 
     it('migration 002 creates alarm_rules table', function () {
-        const db = new Database(':memory:');
+        const db = new DatabaseSync(':memory:');
         runMigrations(db);
         const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name);
         assert.ok(tables.includes('alarm_rules'), 'alarm_rules table must exist after migrations');
     });
 
     it('alarm_rules table has correct columns', function () {
-        const db = new Database(':memory:');
+        const db = new DatabaseSync(':memory:');
         runMigrations(db);
         const cols = db.prepare("PRAGMA table_info(alarm_rules)").all().map(r => r.name);
         ['id','metric','mode','threshold','duration_s','enabled','created_at','updated_at'].forEach(col => {
