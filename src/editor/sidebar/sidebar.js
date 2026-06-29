@@ -19,7 +19,13 @@ function buildSidebar() {
   // Status indicator (ONLINE/OFFLINE)
   const statusEl = document.createElement('div');
   statusEl.className = 'pm-status pm-status-online';
-  statusEl.textContent = 'ONLINE';
+  const statusDot = document.createElement('span');
+  statusDot.className = 'pm-status-dot';
+  const statusLabel = document.createElement('span');
+  statusLabel.className = 'pm-status-label';
+  statusLabel.textContent = 'ONLINE';
+  statusEl.appendChild(statusDot);
+  statusEl.appendChild(statusLabel);
   toolbar.appendChild(statusEl);
 
   // Spacer
@@ -50,12 +56,12 @@ function buildSidebar() {
       .then((stats) => {
         rows.forEach(({ row }) => row.update(stats));
         statusEl.className = 'pm-status pm-status-online';
-        statusEl.textContent = 'ONLINE';
+        statusLabel.textContent = 'ONLINE';
       })
       .catch((err) => {
         console.error('Refresh failed:', err);
         statusEl.className = 'pm-status pm-status-offline';
-        statusEl.textContent = 'OFFLINE';
+        statusLabel.textContent = 'OFFLINE';
       });
   });
   toolbar.appendChild(refreshBtn);
@@ -115,13 +121,13 @@ function buildSidebar() {
         .then((stats) => {
           rows.forEach(({ row }) => row.update(stats));
           statusEl.className = 'pm-status pm-status-online';
-          statusEl.textContent = 'ONLINE';
+          statusLabel.textContent = 'ONLINE';
         })
         .catch((err) => {
           console.error('Poll failed:', err);
           // Keep last values, just mark offline
           statusEl.className = 'pm-status pm-status-offline';
-          statusEl.textContent = 'OFFLINE';
+          statusLabel.textContent = 'OFFLINE';
         });
     }
 

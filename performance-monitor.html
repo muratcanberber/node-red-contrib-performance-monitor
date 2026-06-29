@@ -99,7 +99,7 @@
           id: "app-memory",
           group: "app",
           label: "Node-RED Memory",
-          icon: "fa-memory",
+          icon: "fa-database",
           value: (stats) => {
             const heapUsed = stats.nodeRed.memory?.heapUsed || 0;
             const heapTotal = stats.nodeRed.memory?.heapTotal || 0;
@@ -142,7 +142,7 @@
           id: "sys-cpu",
           group: "sys",
           label: "System CPU",
-          icon: "fa-processor",
+          icon: "fa-server",
           value: (stats) => {
             const cpu = stats.system.cpu?.percent || 0;
             const cores = stats.system.cpu?.cores || 1;
@@ -163,7 +163,7 @@
           id: "sys-memory",
           group: "sys",
           label: "System Memory",
-          icon: "fa-memory",
+          icon: "fa-th-large",
           value: (stats) => {
             const used = stats.system.memory?.used || 0;
             const total = stats.system.memory?.total || 0;
@@ -184,7 +184,7 @@
           id: "sys-disk",
           group: "sys",
           label: "Disk Space",
-          icon: "fa-hdd",
+          icon: "fa-hdd-o",
           value: (stats) => {
             const used = stats.system.disk?.used || 0;
             const total = stats.system.disk?.total || 0;
@@ -205,7 +205,7 @@
           id: "sys-info",
           group: "sys",
           label: "System Info",
-          icon: "fa-server",
+          icon: "fa-desktop",
           value: (stats) => {
             const model = stats.system.cpu?.model || "Unknown";
             const cores = stats.system.cpu?.cores || "N/A";
@@ -415,7 +415,13 @@
         toolbar.className = "pm-toolbar";
         const statusEl = document.createElement("div");
         statusEl.className = "pm-status pm-status-online";
-        statusEl.textContent = "ONLINE";
+        const statusDot = document.createElement("span");
+        statusDot.className = "pm-status-dot";
+        const statusLabel = document.createElement("span");
+        statusLabel.className = "pm-status-label";
+        statusLabel.textContent = "ONLINE";
+        statusEl.appendChild(statusDot);
+        statusEl.appendChild(statusLabel);
         toolbar.appendChild(statusEl);
         const spacer = document.createElement("div");
         spacer.style.flex = "1";
@@ -438,11 +444,11 @@
           getStats().then((stats) => {
             rows.forEach(({ row }) => row.update(stats));
             statusEl.className = "pm-status pm-status-online";
-            statusEl.textContent = "ONLINE";
+            statusLabel.textContent = "ONLINE";
           }).catch((err) => {
             console.error("Refresh failed:", err);
             statusEl.className = "pm-status pm-status-offline";
-            statusEl.textContent = "OFFLINE";
+            statusLabel.textContent = "OFFLINE";
           });
         });
         toolbar.appendChild(refreshBtn);
@@ -486,11 +492,11 @@
             getStats().then((stats) => {
               rows.forEach(({ row }) => row.update(stats));
               statusEl.className = "pm-status pm-status-online";
-              statusEl.textContent = "ONLINE";
+              statusLabel.textContent = "ONLINE";
             }).catch((err) => {
               console.error("Poll failed:", err);
               statusEl.className = "pm-status pm-status-offline";
-              statusEl.textContent = "OFFLINE";
+              statusLabel.textContent = "OFFLINE";
             });
           }
           poll();
@@ -513,7 +519,7 @@
   });
 
   // src/editor/styles.css
-  var styles_default = ".pm-root { padding: 8px; color: var(--red-ui-primary-text-color, #333); font-size: 12px; }\n\n/* Sidebar container */\n.pm-sidebar {\n  display: flex;\n  flex-direction: column;\n  height: 100%;\n  color: var(--red-ui-primary-text-color);\n  font-size: 12px;\n}\n\n/* Toolbar at top */\n.pm-toolbar {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  height: 32px;\n  padding: 4px 8px;\n  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));\n  flex-shrink: 0;\n}\n\n/* Toolbar buttons */\n.pm-toolbar-btn {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  width: 24px;\n  height: 24px;\n  padding: 0;\n  background: none;\n  border: 1px solid transparent;\n  border-radius: 2px;\n  color: var(--red-ui-secondary-text-color);\n  cursor: pointer;\n  font-size: 12px;\n  transition: background-color 0.15s ease;\n}\n\n.pm-toolbar-btn:hover {\n  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.05));\n}\n\n.pm-toolbar-btn:active {\n  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.1));\n}\n\n.pm-toolbar-btn.pm-paused {\n  color: var(--red-ui-text-color-warning, #ff9800);\n}\n\n/* Status indicator */\n.pm-status {\n  font-size: 11px;\n  font-weight: 600;\n  padding: 2px 6px;\n  border-radius: 2px;\n  flex-shrink: 0;\n  letter-spacing: 0.05em;\n}\n\n.pm-status-online {\n  color: var(--red-ui-text-color-success, #3a3);\n  background: var(--red-ui-text-color-success, rgba(51, 170, 51, 0.1));\n}\n\n.pm-status-offline {\n  color: var(--red-ui-text-color-error, #c33);\n  background: var(--red-ui-text-color-error, rgba(204, 51, 51, 0.1));\n}\n\n/* Metric row structure */\n.pm-row {\n  position: relative;\n  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);\n}\n\n/* Row header button */\n.pm-row-head {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  height: 26px;\n  padding: 0 8px;\n  background: none;\n  border: 0;\n  width: 100%;\n  cursor: pointer;\n  color: var(--red-ui-primary-text-color);\n  font-size: 12px;\n  font-family: inherit;\n  text-align: left;\n}\n\n.pm-row-head:hover {\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));\n}\n\n.pm-row-head:active {\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.05));\n}\n\n/* Icon styling */\n.pm-row-head .fa {\n  flex-shrink: 0;\n  width: 16px;\n  text-align: center;\n  color: var(--red-ui-secondary-text-color);\n}\n\n/* Label styling */\n.pm-row-head .pm-label {\n  flex: 1;\n  text-align: left;\n  color: var(--red-ui-secondary-text-color);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n/* Value styling with tabular numbers for alignment */\n.pm-row-head .pm-value {\n  font-variant-numeric: tabular-nums;\n  color: var(--red-ui-primary-text-color);\n  flex-shrink: 0;\n  white-space: nowrap;\n}\n\n/* Fill bar (status indicator) */\n.pm-fill {\n  position: absolute;\n  bottom: 0;\n  left: 0;\n  height: 2px;\n  width: 0;\n  background: var(--red-ui-text-color-link);\n  transition: width 0.2s ease, background-color 0.2s ease;\n}\n\n/* Status color classes */\n.pm-fill.pm-ok {\n  background: var(--red-ui-text-color-success, #3a3);\n}\n\n.pm-fill.pm-warn {\n  background: var(--red-ui-secondary-border-color, #f0ad4e);\n}\n\n.pm-fill.pm-crit {\n  background: var(--red-ui-text-color-error, #c33);\n}\n\n/* Detail panel (collapsed by default) */\n.pm-detail {\n  display: none;\n  padding: 4px 8px 8px 24px;\n  color: var(--red-ui-primary-text-color);\n  font-size: 11px;\n}\n\n/* Show detail when row is open */\n.pm-open .pm-detail {\n  display: block;\n}\n\n/* Detail grid layout for label-value pairs */\n.pm-detail-grid {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 4px 12px;\n  margin-bottom: 8px;\n}\n\n.pm-detail-label {\n  color: var(--red-ui-tertiary-text-color);\n  font-weight: 500;\n}\n\n.pm-detail-value {\n  color: var(--red-ui-primary-text-color);\n  font-variant-numeric: tabular-nums;\n  text-align: right;\n}\n\n/* Sparkline container */\n.pm-sparkline-container {\n  margin-top: 8px;\n  border-top: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  padding-top: 8px;\n}\n\n.pm-spark {\n  width: 100%;\n  height: auto;\n  max-width: 100px;\n  display: inline-block;\n}\n\n/* Group headers */\n.pm-group-head {\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: 0.04em;\n  color: var(--red-ui-tertiary-text-color);\n  padding: 6px 8px 2px;\n  font-weight: 600;\n  margin-top: 8px;\n}\n\n.pm-group-head:first-child {\n  margin-top: 0;\n}\n\n/* Group container */\n.pm-group {\n  border: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  border-radius: 2px;\n  overflow: hidden;\n}\n";
+  var styles_default = ".pm-root { padding: 8px; color: var(--red-ui-primary-text-color, #333); font-size: 12px; }\n\n/* Sidebar container */\n.pm-sidebar {\n  display: flex;\n  flex-direction: column;\n  height: 100%;\n  color: var(--red-ui-primary-text-color);\n  font-size: 12px;\n}\n\n/* Toolbar at top */\n.pm-toolbar {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  height: 32px;\n  padding: 4px 8px;\n  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));\n  flex-shrink: 0;\n}\n\n/* Toolbar buttons */\n.pm-toolbar-btn {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  width: 24px;\n  height: 24px;\n  padding: 0;\n  background: none;\n  border: 1px solid transparent;\n  border-radius: 2px;\n  color: var(--red-ui-secondary-text-color);\n  cursor: pointer;\n  font-size: 12px;\n  transition: background-color 0.15s ease;\n}\n\n.pm-toolbar-btn:hover {\n  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.05));\n}\n\n.pm-toolbar-btn:active {\n  background: var(--red-ui-tertiary-background, rgba(0, 0, 0, 0.1));\n}\n\n.pm-toolbar-btn.pm-paused {\n  color: var(--red-ui-text-color-warning, #ff9800);\n}\n\n/* Status indicator */\n.pm-status {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  font-size: 11px;\n  font-weight: 600;\n  flex-shrink: 0;\n  letter-spacing: 0.05em;\n  color: var(--red-ui-secondary-text-color, #666);\n}\n\n.pm-status-dot {\n  display: inline-block;\n  width: 8px;\n  height: 8px;\n  border-radius: 50%;\n  flex-shrink: 0;\n}\n\n.pm-status-label {\n  white-space: nowrap;\n}\n\n.pm-status-online .pm-status-dot {\n  background: var(--red-ui-text-color-success, #5a5);\n}\n\n.pm-status-offline .pm-status-dot {\n  background: var(--red-ui-text-color-error, #c33);\n}\n\n/* Metric row structure */\n.pm-row {\n  position: relative;\n  border-bottom: 1px solid var(--red-ui-tertiary-border-color, #eee);\n}\n\n/* Row header button */\n.pm-row-head {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  height: 26px;\n  padding: 0 8px;\n  background: none;\n  border: 0;\n  width: 100%;\n  cursor: pointer;\n  color: var(--red-ui-primary-text-color);\n  font-size: 12px;\n  font-family: inherit;\n  text-align: left;\n}\n\n.pm-row-head:hover {\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.02));\n}\n\n.pm-row-head:active {\n  background: var(--red-ui-secondary-background, rgba(0, 0, 0, 0.05));\n}\n\n/* Icon styling */\n.pm-row-head .fa {\n  flex-shrink: 0;\n  width: 16px;\n  text-align: center;\n  color: var(--red-ui-secondary-text-color);\n}\n\n/* Label styling */\n.pm-row-head .pm-label {\n  flex: 1;\n  text-align: left;\n  color: var(--red-ui-secondary-text-color);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n/* Value styling with tabular numbers for alignment */\n.pm-row-head .pm-value {\n  font-variant-numeric: tabular-nums;\n  color: var(--red-ui-primary-text-color);\n  flex-shrink: 0;\n  white-space: nowrap;\n}\n\n/* Fill bar (status indicator) */\n.pm-fill {\n  position: absolute;\n  bottom: 0;\n  left: 0;\n  height: 2px;\n  width: 0;\n  background: var(--red-ui-text-color-link);\n  transition: width 0.2s ease, background-color 0.2s ease;\n}\n\n/* Status color classes */\n.pm-fill.pm-ok {\n  background: var(--red-ui-text-color-success, #3a3);\n}\n\n.pm-fill.pm-warn {\n  background: var(--red-ui-secondary-border-color, #f0ad4e);\n}\n\n.pm-fill.pm-crit {\n  background: var(--red-ui-text-color-error, #c33);\n}\n\n/* Detail panel (collapsed by default) */\n.pm-detail {\n  display: none;\n  padding: 4px 8px 8px 24px;\n  color: var(--red-ui-primary-text-color);\n  font-size: 11px;\n}\n\n/* Show detail when row is open */\n.pm-open .pm-detail {\n  display: block;\n}\n\n/* Detail grid layout for label-value pairs */\n.pm-detail-grid {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 4px 12px;\n  margin-bottom: 8px;\n}\n\n.pm-detail-label {\n  color: var(--red-ui-tertiary-text-color);\n  font-weight: 500;\n}\n\n.pm-detail-value {\n  color: var(--red-ui-primary-text-color);\n  font-variant-numeric: tabular-nums;\n  text-align: right;\n}\n\n/* Sparkline container */\n.pm-sparkline-container {\n  margin-top: 8px;\n  border-top: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  padding-top: 8px;\n}\n\n.pm-spark {\n  width: 100%;\n  height: auto;\n  max-width: 100px;\n  display: inline-block;\n}\n\n/* Group headers */\n.pm-group-head {\n  font-size: 11px;\n  text-transform: uppercase;\n  letter-spacing: 0.04em;\n  color: var(--red-ui-tertiary-text-color);\n  padding: 6px 8px 2px;\n  font-weight: 600;\n  margin-top: 8px;\n}\n\n.pm-group-head:first-child {\n  margin-top: 0;\n}\n\n/* Group container */\n.pm-group {\n  border: 1px solid var(--red-ui-tertiary-border-color, #eee);\n  border-radius: 2px;\n  overflow: hidden;\n}\n";
 
   // src/editor/index.js
   var import_sidebar = __toESM(require_sidebar());

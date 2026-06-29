@@ -39,7 +39,7 @@ const SECTIONS = [
     id: 'app-memory',
     group: 'app',
     label: 'Node-RED Memory',
-    icon: 'fa-memory',
+    icon: 'fa-database',
     value: (stats) => {
       const heapUsed = stats.nodeRed.memory?.heapUsed || 0;
       const heapTotal = stats.nodeRed.memory?.heapTotal || 0;
@@ -82,7 +82,7 @@ const SECTIONS = [
     id: 'sys-cpu',
     group: 'sys',
     label: 'System CPU',
-    icon: 'fa-processor',
+    icon: 'fa-server',
     value: (stats) => {
       const cpu = stats.system.cpu?.percent || 0;
       const cores = stats.system.cpu?.cores || 1;
@@ -103,7 +103,7 @@ const SECTIONS = [
     id: 'sys-memory',
     group: 'sys',
     label: 'System Memory',
-    icon: 'fa-memory',
+    icon: 'fa-th-large',
     value: (stats) => {
       const used = stats.system.memory?.used || 0;
       const total = stats.system.memory?.total || 0;
@@ -124,7 +124,7 @@ const SECTIONS = [
     id: 'sys-disk',
     group: 'sys',
     label: 'Disk Space',
-    icon: 'fa-hdd',
+    icon: 'fa-hdd-o',
     value: (stats) => {
       const used = stats.system.disk?.used || 0;
       const total = stats.system.disk?.total || 0;
@@ -145,7 +145,7 @@ const SECTIONS = [
     id: 'sys-info',
     group: 'sys',
     label: 'System Info',
-    icon: 'fa-server',
+    icon: 'fa-desktop',
     value: (stats) => {
       const model = stats.system.cpu?.model || 'Unknown';
       const cores = stats.system.cpu?.cores || 'N/A';
