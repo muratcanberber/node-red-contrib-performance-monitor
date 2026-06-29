@@ -18,7 +18,6 @@ const SECTIONS = [
     detail: (stats) => [
       { label: 'PID', value: String(stats.nodeRed.pid || 'N/A') },
       { label: 'Uptime', value: stats.nodeRed.uptime ? formatUptime(stats.nodeRed.uptime) : 'N/A' },
-      { label: 'Platform', value: process.platform || 'N/A' },
     ],
   },
   {

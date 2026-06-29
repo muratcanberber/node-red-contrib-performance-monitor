@@ -1,4 +1,5 @@
 const assert = require('assert');
+const fs = require('fs');
 const { SECTIONS } = require('../src/editor/sidebar/sections');
 const sample = {
   nodeRed: { cpu: 12.5, memory: { rss: 100, heapUsed: 50, heapTotal: 80, external: 4, arrayBuffers: 1 }, eventLoopLag: 2.0, pid: 1, uptime: 3600 },
@@ -16,5 +17,24 @@ describe('editor/sections', function () {
     assert.match(cpu.value(sample), /12\.5/);
     const sysMem = SECTIONS.find((s) => s.id === 'sys-memory');
     assert.strictEqual(sysMem.percent(sample), 60);
+  });
+  it('value() and detail() accessors do not throw and return correct shape', function () {
+    SECTIONS.forEach((section) => {
+      assert.doesNotThrow(() => {
+        const val = section.value(sample);
+        assert.strictEqual(typeof val, 'string', `value() for ${section.id} must return string`);
+      }, `value() threw for section ${section.id}`);
+      assert.doesNotThrow(() => {
+        const details = section.detail(sample);
+        assert.ok(Array.isArray(details), `detail() for ${section.id} must return array`);
+        details.forEach((row) => {
+          assert.ok(row.label && row.value !== undefined, `detail row in ${section.id} missing label or value`);
+        });
+      }, `detail() threw for section ${section.id}`);
+    });
+  });
+  it('sections.js does not reference Node-only globals like process at runtime', function () {
+    const src = fs.readFileSync(require.resolve('../src/editor/sidebar/sections.js'), 'utf8');
+    assert.ok(!src.includes('process.'), 'sections.js must not reference process. (Node-only global)');
   });
 });
