@@ -4,7 +4,9 @@
   "description": "Node-RED performance monitor plugin with SQLite history, flow node, and anomaly detection.",
   "main": "performance-monitor.js",
   "scripts": {
-    "test": "mocha test/**/*.js --timeout 10000"
+    "test": "mocha test/**/*.js --timeout 10000",
+    "build": "node build/build.mjs",
+    "build:watch": "node build/build.mjs --watch"
   },
   "keywords": [
     "node-red",
@@ -32,6 +34,7 @@
     }
   },
   "devDependencies": {
+    "esbuild": "^0.24.0",
     "mocha": "^10.2.0",
     "sinon": "^17.0.1"
   },
